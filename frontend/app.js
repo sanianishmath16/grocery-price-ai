@@ -1,13 +1,13 @@
 /**
- * app.js ΓÇö GroceryAI frontend logic (v3 ΓÇö with image search)
+ * app.js - GroceryAI frontend logic
  *
- * TEXT SEARCH API  (unchanged):
+ * TEXT SEARCH API:
  *   POST /api/compare  { items: string[], pincode: string }
- *   ΓåÆ CompareResponse  { results: AppPrice[], savings_tip: string, query_items: GroceryItem[] }
+ *   -> CompareResponse  { results: AppPrice[], savings_tip: string, query_items: GroceryItem[] }
  *
- * IMAGE SEARCH API  (new):
+ * IMAGE SEARCH API:
  *   POST /api/analyze-images  { images_b64: string[], pincode: string }
- *   ΓåÆ ImageAnalyzeResponse {
+ *   -> ImageAnalyzeResponse {
  *       vision_status: "ok"|"not_configured"|"no_products"|"error",
  *       detected: DetectedProduct[],
  *       compare_result: CompareResponse | null,
@@ -17,28 +17,23 @@
 
 "use strict";
 
-// ΓöÇΓöÇΓöÇ Config ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-// API_BASE is always same-origin ("") ΓÇö nginx proxies /api/* to FastAPI
-// in every environment: Docker local, VPS, Render, Fly.io, Railway.
-// No backend URL is ever hardcoded or exposed in this file.
-// The only time you would change this is if you serve the frontend from a
-// completely separate domain; in that case set window.__GROCERYAI_API
-// from an injected <script> tag in index.html (see deploy docs).
+// --- Config ---
+// API_BASE is always same-origin ("") - nginx proxies /api/* to FastAPI
 const API_BASE = window.__GROCERYAI_API || "";
 
 const MAX_IMAGES = 10;
-const MAX_IMAGE_PX = 1024;     // resize longest edge to this before upload
-const JPEG_QUALITY = 0.82;     // canvas JPEG compression quality
+const MAX_IMAGE_PX = 1024;   // resize longest edge to this before upload
+const JPEG_QUALITY = 0.82;   // canvas JPEG compression quality
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const APP_CONFIG = {
-  blinkit:   { icon: "ΓÜí", label: "Blinkit" },
-  zepto:     { icon: "≡ƒƒú", label: "Zepto" },
-  instamart: { icon: "≡ƒìè", label: "Instamart" },
-  flipkart:  { icon: "≡ƒö╡", label: "Flipkart Min." },
+  blinkit:   { label: "Blinkit" },
+  zepto:     { label: "Zepto" },
+  instamart: { label: "Instamart" },
+  flipkart:  { label: "Flipkart Min." },
 };
 
-// ΓöÇΓöÇΓöÇ DOM refs ΓÇö Text search ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- DOM refs - Text search ---
 const itemsInput     = document.getElementById("items-input");
 const pincodeInput   = document.getElementById("pincode-input");
 const compareBtn     = document.getElementById("compare-btn");
@@ -53,30 +48,30 @@ const breakdownSec   = document.getElementById("breakdown-section");
 const itemCount      = document.getElementById("item-count");
 const clearBtn       = document.getElementById("clear-btn");
 
-// ΓöÇΓöÇΓöÇ DOM refs ΓÇö Image search ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-const imgPincodeInput  = document.getElementById("img-pincode-input");
-const imgPincodeError  = document.getElementById("img-pincode-error");
-const analyseBtn       = document.getElementById("analyse-btn");
-const imgErrorMsg      = document.getElementById("img-error-msg");
-const imgUploadError   = document.getElementById("img-upload-error");
+// --- DOM refs - Image search ---
+const imgPincodeInput   = document.getElementById("img-pincode-input");
+const imgPincodeError   = document.getElementById("img-pincode-error");
+const analyseBtn        = document.getElementById("analyse-btn");
+const imgErrorMsg       = document.getElementById("img-error-msg");
+const imgUploadError    = document.getElementById("img-upload-error");
 const imgLoadingSection = document.getElementById("img-loading-section");
-const imgLoadingTitle  = document.getElementById("img-loading-title");
-const imgLoadingSub    = document.getElementById("img-loading-sub");
-const detectedSection  = document.getElementById("detected-section");
-const detectedList     = document.getElementById("detected-list");
-const imgResultsSec    = document.getElementById("img-results-section");
-const imgSavingsTip    = document.getElementById("img-savings-tip");
-const imgAppCardsEl    = document.getElementById("img-app-cards");
-const imgBreakdownSec  = document.getElementById("img-breakdown-section");
-const dropZone         = document.getElementById("drop-zone");
-const fileInput        = document.getElementById("file-input");
-const browseBtn        = document.getElementById("browse-btn");
-const thumbGrid        = document.getElementById("thumb-grid");
-const uploadCount      = document.getElementById("upload-count");
-const clearImagesBtn   = document.getElementById("clear-images-btn");
-const visionNotice     = document.getElementById("vision-notice");
+const imgLoadingTitle   = document.getElementById("img-loading-title");
+const imgLoadingSub     = document.getElementById("img-loading-sub");
+const detectedSection   = document.getElementById("detected-section");
+const detectedList      = document.getElementById("detected-list");
+const imgResultsSec     = document.getElementById("img-results-section");
+const imgSavingsTip     = document.getElementById("img-savings-tip");
+const imgAppCardsEl     = document.getElementById("img-app-cards");
+const imgBreakdownSec   = document.getElementById("img-breakdown-section");
+const dropZone          = document.getElementById("drop-zone");
+const fileInput         = document.getElementById("file-input");
+const browseBtn         = document.getElementById("browse-btn");
+const thumbGrid         = document.getElementById("thumb-grid");
+const uploadCount       = document.getElementById("upload-count");
+const clearImagesBtn    = document.getElementById("clear-images-btn");
+const visionNotice      = document.getElementById("vision-notice");
 
-// ΓöÇΓöÇΓöÇ Tab state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- Tab state ---
 function switchTab(tab) {
   const isText = tab === "text";
   document.getElementById("tab-text").classList.toggle("active", isText);
@@ -87,11 +82,11 @@ function switchTab(tab) {
   document.getElementById("panel-image").classList.toggle("hidden", isText);
 }
 
-// ΓöÇΓöÇΓöÇ Image state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- Image state ---
 /** @type {{ file: File, b64: string, objectUrl: string }[]} */
 let uploadedImages = [];
 
-// ΓöÇΓöÇΓöÇ Item counter (text search) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- Item counter (text search) ---
 function updateItemCount() {
   const n = getItems().length;
   itemCount.textContent = n === 0 ? "0 items" : n === 1 ? "1 item" : `${n} items`;
@@ -104,7 +99,7 @@ function getItems() {
 itemsInput.addEventListener("input", updateItemCount);
 clearBtn.addEventListener("click", () => { itemsInput.value = ""; updateItemCount(); itemsInput.focus(); });
 
-// ΓöÇΓöÇΓöÇ Helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- Helpers ---
 function showError(el, msg) {
   el.textContent = msg;
   el.classList.remove("hidden");
@@ -130,7 +125,6 @@ function setTextLoading(on) {
 
 function setImageLoading(on) {
   imgLoadingSection.classList.toggle("hidden", !on);
-  // hide the upload grid while loading; keep pincode card visible via loading section
   document.querySelector(".img-search-grid").classList.toggle("hidden", on);
   analyseBtn.disabled = on;
   analyseBtn.querySelector(".btn-text").classList.toggle("hidden", on);
@@ -142,8 +136,8 @@ function updateLoadingStep(title, sub) {
   imgLoadingSub.textContent = sub;
 }
 
-function formatPrice(n)     { return "Γé╣" + n.toFixed(0); }
-function formatPriceFull(n) { return "Γé╣" + n.toFixed(2); }
+function formatPrice(n)     { return "\u20B9" + n.toFixed(0); }
+function formatPriceFull(n) { return "\u20B9" + n.toFixed(2); }
 
 function confClass(s) {
   if (s === 0)  return "conf-none";
@@ -159,9 +153,9 @@ function confLabel(s) {
   return "Low";
 }
 
-// ΓöÇΓöÇΓöÇ Image compression ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- Image compression ---
 /**
- * Resize a File to Γëñ MAX_IMAGE_PX on the longest side, then return base64 JPEG.
+ * Resize a File to <= MAX_IMAGE_PX on the longest side, then return base64 JPEG.
  * @param {File} file
  * @returns {Promise<string>} raw base64 (no data URI prefix)
  */
@@ -190,7 +184,7 @@ async function compressImage(file) {
   });
 }
 
-// ΓöÇΓöÇΓöÇ Image upload handling ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- Image upload handling ---
 async function addFiles(files) {
   clearError(imgUploadError);
   const incoming = Array.from(files);
@@ -198,7 +192,7 @@ async function addFiles(files) {
   // Validate types
   const bad = incoming.filter(f => !ALLOWED_TYPES.has(f.type));
   if (bad.length) {
-    showError(imgUploadError, `Please upload JPG, PNG, or WebP images only.`);
+    showError(imgUploadError, "Please upload JPG, PNG, or WebP images only.");
     return;
   }
 
@@ -259,7 +253,7 @@ function renderThumbs() {
     btn.className = "thumb-remove";
     btn.type = "button";
     btn.setAttribute("aria-label", `Remove image ${idx + 1}`);
-    btn.innerHTML = "├ù";
+    btn.textContent = "x";
     btn.addEventListener("click", (e) => { e.stopPropagation(); removeImage(idx); });
 
     div.appendChild(img);
@@ -268,7 +262,7 @@ function renderThumbs() {
   });
 }
 
-// ΓöÇΓöÇΓöÇ Drop zone events ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- Drop zone events ---
 dropZone.addEventListener("click", (e) => {
   if (e.target === browseBtn || browseBtn.contains(e.target)) return;
   fileInput.click();
@@ -308,7 +302,7 @@ clearImagesBtn.addEventListener("click", clearAllImages);
 pincodeInput.addEventListener("keydown", e => { if (e.key === "Enter") compareItems(); });
 imgPincodeInput.addEventListener("keydown", e => { if (e.key === "Enter") analyseImages(); });
 
-// ΓöÇΓöÇΓöÇ TEXT SEARCH ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- TEXT SEARCH ---
 async function compareItems() {
   clearError(errorMsg);
   showPincodeErr(pincodeError, pincodeInput, false);
@@ -382,8 +376,8 @@ function renderCompareResults(data, cardsEl, bdSec, tipEl, resultsSec) {
 
 function buildAppCard(app, rank) {
   const isBest = rank === 0;
-  const cfg    = APP_CONFIG[app.app_name] || { icon: "≡ƒ¢Æ", label: app.app_name };
-  const rankEmoji = ["≡ƒÑç", "≡ƒÑê", "≡ƒÑë", "4∩╕ÅΓâú"][rank] || `${rank + 1}`;
+  const cfg    = APP_CONFIG[app.app_name] || { label: app.app_name };
+  const rankLabel = ["1st", "2nd", "3rd", "4th"][rank] || `${rank + 1}th`;
   const totalItems = app.items_found + app.items_missing.length;
 
   const deliveryHtml = app.delivery_fee > 0
@@ -395,7 +389,7 @@ function buildAppCard(app, rank) {
     : "";
 
   const missingHtml = app.items_missing.length > 0
-    ? `<div class="app-card-missing">ΓÜá Not found: ${app.items_missing.join(", ")}</div>`
+    ? `<div class="app-card-missing">Not found: ${app.items_missing.join(", ")}</div>`
     : "";
 
   const card = document.createElement("div");
@@ -403,8 +397,7 @@ function buildAppCard(app, rank) {
   card.dataset.appName = app.app_name;
 
   card.innerHTML = `
-    <div class="app-card-rank" aria-label="Rank ${rank + 1}">${rankEmoji}</div>
-    <div class="app-card-icon" aria-hidden="true">${cfg.icon}</div>
+    <div class="app-card-rank" aria-label="Rank ${rank + 1}">${rankLabel}</div>
     <div class="app-card-name">${cfg.label}</div>
     ${isBest ? '<div class="best-badge">Best Deal</div>' : ""}
     <div class="app-card-price" aria-label="Total ${formatPrice(app.total_price)}">${formatPrice(app.total_price)}</div>
@@ -423,7 +416,7 @@ function buildBreakdownSection(data) {
   const toggle = document.createElement("button");
   toggle.className = "breakdown-toggle";
   toggle.setAttribute("aria-expanded", "false");
-  toggle.innerHTML = `<span>Per-item Price Breakdown</span><span class="breakdown-toggle-icon" aria-hidden="true">Γû╛</span>`;
+  toggle.innerHTML = `<span>Per-item Price Breakdown</span><span class="breakdown-toggle-icon" aria-hidden="true">+</span>`;
 
   const tableWrap = document.createElement("div");
   tableWrap.className = "breakdown-table-wrap hidden";
@@ -434,6 +427,7 @@ function buildBreakdownSection(data) {
     toggle.classList.toggle("open", open);
     toggle.setAttribute("aria-expanded", String(open));
     tableWrap.classList.toggle("hidden", !open);
+    toggle.querySelector(".breakdown-toggle-icon").textContent = open ? "-" : "+";
   });
 
   const appNames = data.results.map(a => APP_CONFIG[a.app_name]?.label || a.app_name);
@@ -451,7 +445,7 @@ function buildBreakdownSection(data) {
       || app.matches[itemIdx]
       || null
     );
-    const prices  = appMatches.filter(m => m && m.found).map(m => m.price);
+    const prices   = appMatches.filter(m => m && m.found).map(m => m.price);
     const minPrice = prices.length ? Math.min(...prices) : null;
 
     const tr = document.createElement("tr");
@@ -479,7 +473,7 @@ function buildBreakdownSection(data) {
   return wrapper;
 }
 
-// ΓöÇΓöÇΓöÇ TEXT SEARCH RESET ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- TEXT SEARCH RESET ---
 function resetForm() {
   resultsSection.classList.add("hidden");
   formSection.classList.remove("hidden");
@@ -489,7 +483,7 @@ function resetForm() {
   itemsInput.focus();
 }
 
-// ΓöÇΓöÇΓöÇ IMAGE SEARCH ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- IMAGE SEARCH ---
 async function analyseImages() {
   clearError(imgErrorMsg);
   clearError(imgUploadError);
@@ -548,13 +542,13 @@ function handleImageResponse(data, pincode) {
 
   const status = data.vision_status;
 
-  // ΓöÇΓöÇ Not configured (no API key set) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // Not configured (no API key set)
   if (status === "not_configured") {
     visionNotice.classList.remove("hidden");
     return;
   }
 
-  // ΓöÇΓöÇ Quota exhausted (credits used up) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // Quota exhausted (credits used up)
   if (status === "quota_exhausted") {
     showVisionUnavailable(
       "Image recognition is temporarily unavailable because the AI service has reached its usage limit.",
@@ -563,7 +557,7 @@ function handleImageResponse(data, pincode) {
     return;
   }
 
-  // ΓöÇΓöÇ Transient rate limit ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // Transient rate limit
   if (status === "rate_limited") {
     showError(imgErrorMsg,
       "The AI service is currently busy. Please wait a moment and try again. Text search is still available."
@@ -571,7 +565,7 @@ function handleImageResponse(data, pincode) {
     return;
   }
 
-  // ΓöÇΓöÇ Authentication / key problem ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // Authentication / key problem
   if (status === "auth_error") {
     showError(imgErrorMsg,
       "Image recognition could not connect to the AI service. Please contact the site administrator."
@@ -579,15 +573,15 @@ function handleImageResponse(data, pincode) {
     return;
   }
 
-  // ΓöÇΓöÇ Generic error or no products found ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // Generic error or no products found
   if (status === "error" || status === "no_products") {
     const msg = data.error_message
-      || "We couldn't identify any products. Try uploading a clearer image.";
+      || "We could not identify any products. Try uploading a clearer image.";
     showError(imgErrorMsg, msg);
     return;
   }
 
-  // ΓöÇΓöÇ OK ΓÇö show detected products for review ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // OK - show detected products for review
   if (data.detected && data.detected.length > 0) {
     renderDetectedProducts(data.detected);
 
@@ -622,7 +616,7 @@ function renderDetectedProducts(detected) {
     const check = document.createElement("span");
     check.className = "detected-check";
     check.setAttribute("aria-hidden", "true");
-    check.textContent = "Γ£ô";
+    check.textContent = "\u2713";
 
     const input = document.createElement("input");
     input.type = "text";
@@ -716,7 +710,7 @@ function renderImageCompareResults(data) {
   imgResultsSec.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ΓöÇΓöÇΓöÇ IMAGE SEARCH RESET ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// --- IMAGE SEARCH RESET ---
 function resetImageSearch() {
   imgResultsSec.classList.add("hidden");
   detectedSection.classList.add("hidden");

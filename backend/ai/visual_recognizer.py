@@ -181,12 +181,10 @@ def _dedup_by_colour_group(hits: dict) -> dict:
 # ---------------------------------------------------------------------------
 _LOW_SAT_PROFILES: List[Tuple[str, int, int, int, int, float]] = [
     # (name, val_lo, val_hi, sat_lo, sat_hi, confidence)
-    # Require sat < 45 AND minimum hit fraction 25% to distinguish from neutral
-    # backgrounds (white walls, packaging, bright floors).
-    ("Cauliflower", 195, 255,  0,  45, 0.62),   # bright white
-    ("Garlic",      200, 255,  0,  30, 0.58),   # very white, very low sat
-    # Mushroom and potato have too much overlap with common backgrounds —
-    # removed from low-sat profiles to avoid false positives on grey scenes.
+    # Cauliflower: very bright cream-white (val >= 220) with very low saturation (sat <= 30).
+    # Pure grey walls/floors have moderate value (100-200) not >= 220, so this is safe.
+    # Garlic removed — too similar to any white/light background.
+    ("Cauliflower", 220, 255,  0,  30, 0.62),   # very bright white, almost no saturation
 ]
 
 
