@@ -1,0 +1,60 @@
+# fly.toml — Fly.io deployment for GroceryAI
+#
+# Fly.io runs the Docker image globally and gives you a public HTTPS URL.
+# Free tier: 3 shared-cpu-1x 256 MB VMs, always-on.
+#
+# Setup (one-time):
+#   1. Install flyctl:  https://fly.io/docs/hands-on/install-flyctl/
+#   2. Sign up / log in:  fly auth signup  OR  fly auth login
+#   3. Launch the app:    fly launch --no-deploy  (from grocery-price-ai/)
+#   4. Set secrets:       fly secrets set OPENAI_API_KEY=sk-...
+#   5. Add Redis:         fly redis create  (or use Upstash below)
+#   6. Set REDIS_URL:     fly secrets set REDIS_URL=redis://...
+#   7. Deploy:            fly deploy
+#
+# Your app will be live at:  https://<app-name>.fly.dev
+#
+# NOTE: Fly.io deploys the FastAPI backend. The frontend (static HTML/CSS/JS)
+# is served by nginx inside the SAME container via the existing Dockerfile.
+# Everything stays in one Docker image — no separate frontend deploy needed.
+
+app       = "groceryai"          # change to your chosen app name
+primary_region = "sin"           # Singapore (closest to India); or "bom" when available
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Non-secret defaults — override with `fly secrets set`
+  CORS_ORIGINS = "*"
+
+[[services]]
+  internal_port = 80
+  protocol      = "tcp"
+
+  [[services.ports]]
+    port     = 80
+    handlers = ["http"]
+    force_https = true
+
+  [[services.ports]]
+    port     = 443
+    handlers = ["tls", "http"]
+
+  [services.concurrency]
+    type       = "requests"
+    soft_limit = 25
+    hard_limit = 50
+
+  [[services.http_checks]]
+    interval = "15s"
+    timeout  = "5s"
+    path     = "/api/health"
+
+[mounts]
+  # No persistent disk needed — Redis handles caching
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus     = 1
+  memory   = "256mb"
