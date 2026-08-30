@@ -261,7 +261,10 @@ class _NoopRecognizer:
 async def _identify_via_hybrid(images_b64: List[str]) -> VisionResult:
     """Run the visual+OCR hybrid pipeline in a thread executor."""
     import asyncio
-    loop = asyncio.get_event_loop()
+    # get_running_loop() is correct inside an already-running coroutine (Python 3.10+).
+    # get_event_loop() is deprecated in this context and can return a closed/wrong loop,
+    # causing run_in_executor to fail and uvicorn to return 502.
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _sync_hybrid_pipeline, images_b64)
 
 
@@ -297,13 +300,17 @@ def _resize_image_bytes(image_bytes: bytes, max_px: int = 800) -> bytes:
 
 def _sync_hybrid_pipeline(images_b64: List[str]) -> VisionResult:
     """
-    Synchronous hybrid pipeline.
+    Synchronous hybrid pipeline — runs in a thread executor, must NEVER raise.
     For each image:
       1. Resize to max 800px (prevents OOM on large phone photos)
       2. Run visual recognizer (colour-based, multi-crop)
       3. Run OCR matcher (Tesseract + keyword KB)
       4. Fuse results: prefer visual for fresh produce, OCR for branded items
       5. Deduplicate across images
+
+    The outer try/except ensures that even unexpected exceptions return a safe
+    VisionResult instead of propagating through run_in_executor and causing
+    uvicorn to return a 500/502.
     """
     try:
         from ai.visual_recognizer import get_recognizer
@@ -316,18 +323,25 @@ def _sync_hybrid_pipeline(images_b64: List[str]) -> VisionResult:
     all_products: List[DetectedProduct] = []
     seen_names: set = set()
 
-    for img_idx, b64 in enumerate(images_b64):
-        try:
-            raw = base64.b64decode(b64)
-            raw = _resize_image_bytes(raw, max_px=800)
-            products = _process_single_image_hybrid(raw, img_idx, recognizer)
-            for p in products:
-                key = p.name.lower()
-                if key not in seen_names:
-                    seen_names.add(key)
-                    all_products.append(p)
-        except Exception as exc:
-            logger.warning("Hybrid pipeline failed for image %d: %s", img_idx, exc)
+    try:
+        for img_idx, b64 in enumerate(images_b64):
+            try:
+                raw = base64.b64decode(b64)
+                raw = _resize_image_bytes(raw, max_px=800)
+                products = _process_single_image_hybrid(raw, img_idx, recognizer)
+                for p in products:
+                    key = p.name.lower()
+                    if key not in seen_names:
+                        seen_names.add(key)
+                        all_products.append(p)
+            except Exception as exc:
+                logger.warning(
+                    "Hybrid pipeline failed for image %d: %s", img_idx, exc,
+                    exc_info=True,
+                )
+    except Exception as exc:
+        # Catch-all: if something goes wrong outside the per-image loop
+        logger.error("Unexpected error in hybrid pipeline: %s", exc, exc_info=True)
 
     if not all_products:
         return VisionResult(
@@ -344,7 +358,7 @@ def _sync_hybrid_pipeline(images_b64: List[str]) -> VisionResult:
         "Hybrid pipeline identified %d products from %d image(s): %s",
         len(all_products),
         len(images_b64),
-        [p.name for p in all_products[:8]],
+        [p.name for p in all_products[:6]],
     )
     return VisionResult(
         status=VisionStatus.OK,
@@ -454,7 +468,9 @@ def _process_single_image_hybrid(
 
 # Maximum products returned per single image — a real basket photo rarely
 # has more than this many DISTINCT visually dominant objects.
-_MAX_PRODUCTS_PER_IMAGE = 8
+# Set to 6 to match VisualRecognizer.MAX_PRODUCTS and prevent accumulated
+# noise from crops producing more results than can realistically be present.
+_MAX_PRODUCTS_PER_IMAGE = 6
 
 
 def _fuse_results(
@@ -521,19 +537,25 @@ def _normalise_text(text: str) -> str:
 
 
 def _match_text_to_products(raw_text: str, img_idx: int) -> List[DetectedProduct]:
-    """Match OCR text against the grocery KB. Returns up to 5 matches."""
+    """
+    Match OCR text against the grocery KB.
+
+    Returns at most 3 matches — real product labels rarely have more than
+    2-3 distinct brand/product terms.  Raising the minimum score prevents
+    weak token-overlap matches from adding phantom products.
+    """
     norm_text = _normalise_text(raw_text)
     if not norm_text:
         return []
 
     found: Dict[str, float] = {}
 
-    # Pass 1: full term match
+    # Pass 1: full term match (score 0.90) — very reliable
     for term, (canonical, _) in _TERM_INDEX.items():
         if term in norm_text:
             found[canonical] = max(found.get(canonical, 0.0), 0.90)
 
-    # Pass 2: brand-only match
+    # Pass 2: brand-only match (score 0.65) — reliable when brand name is clear
     if not found:
         for brand in _BRAND_NAMES:
             if brand in norm_text:
@@ -541,7 +563,9 @@ def _match_text_to_products(raw_text: str, img_idx: int) -> List[DetectedProduct
                 if canonical:
                     found[canonical] = max(found.get(canonical, 0.0), 0.65)
 
-    # Pass 3: token overlap
+    # Pass 3: token overlap — only fire when passes 1+2 both missed, and require
+    # a higher overlap fraction (0.75) and a higher minimum score (0.60) to
+    # prevent weak partial matches from generating phantom products.
     if not found:
         text_tokens = set(norm_text.split())
         for term, (canonical, _) in _TERM_INDEX.items():
@@ -549,18 +573,19 @@ def _match_text_to_products(raw_text: str, img_idx: int) -> List[DetectedProduct
             if not term_tokens:
                 continue
             overlap = len(term_tokens & text_tokens) / len(term_tokens)
-            if overlap >= 0.6:
-                score = 0.55 * overlap
+            if overlap >= 0.75:
+                score = 0.65 * overlap   # min score is now 0.65*0.75=0.4875 → filtered below
                 found[canonical] = max(found.get(canonical, 0.0), score)
 
+    # Minimum confidence: 0.60 (was 0.50) — tighter to avoid weak OCR noise
     products = [
         DetectedProduct(name=name, confidence=round(conf, 2),
                         from_image_index=img_idx, source="ocr")
         for name, conf in found.items()
-        if conf >= 0.50
+        if conf >= 0.60
     ]
     products.sort(key=lambda p: p.confidence, reverse=True)
-    return products[:5]
+    return products[:3]   # cap at 3 — real labels rarely have more distinct products
 
 
 def _brand_to_canonical(brand: str, text: str) -> Optional[str]:
