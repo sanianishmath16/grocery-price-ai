@@ -3,9 +3,12 @@ main.py — FastAPI application entry point for GroceryAI.
 
 Endpoints
 ---------
-POST /api/compare  — compare prices across all apps for a grocery list
-GET  /api/health   — simple health check
-GET  /api/apps     — list of supported apps
+POST /api/compare        — compare prices across all apps for a grocery list
+POST /api/analyze-images — identify products from images, then compare prices
+GET  /api/health         — simple health check
+GET  /api/apps           — list of supported apps
+GET  /                   — serves frontend/index.html (fallback when nginx is
+                           not the public entry point, e.g. Render free tier)
 """
 
 import logging
@@ -17,6 +20,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from config import SUPPORTED_APPS, CORS_ORIGINS, MAX_IMAGE_SIZE_BYTES, MAX_IMAGES
 from models.schemas import (
@@ -36,6 +41,23 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Static frontend directory
+# In the prod Docker image the frontend is copied to /usr/share/nginx/html.
+# When running locally (outside Docker) we fall back to ../frontend relative
+# to this file.  If neither path exists, static serving is silently skipped
+# and the app works as an API-only server.
+# ---------------------------------------------------------------------------
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_FRONTEND_CANDIDATES = [
+    "/usr/share/nginx/html",           # prod Docker image
+    os.path.join(_THIS_DIR, "..", "frontend"),  # local / dev
+]
+FRONTEND_DIR: str | None = next(
+    (p for p in _FRONTEND_CANDIDATES if os.path.isfile(os.path.join(p, "index.html"))),
+    None,
+)
 
 # ---------------------------------------------------------------------------
 # App
@@ -226,4 +248,35 @@ async def analyze_images(body: ImageAnalyzeRequest):
         vision_status=VisionStatus.OK.value,
         detected=detected,
         compare_result=compare_response,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Frontend static files — mounted AFTER all /api/* routes so API routes win.
+#
+# This makes uvicorn itself serve the frontend when nginx is not the public
+# entry point (e.g. when Render runs the container without BUILD_TARGET=prod
+# or when the service was created manually via the Render dashboard UI).
+#
+# Route priority (FastAPI processes routes top-to-bottom):
+#   /api/*   → handled by the endpoint functions above
+#   /        → FileResponse(index.html)
+#   /app.js, /style.css, /favicon.svg, etc. → StaticFiles
+# ---------------------------------------------------------------------------
+if FRONTEND_DIR:
+    logger.info("Serving frontend from: %s", FRONTEND_DIR)
+
+    @app.get("/", include_in_schema=False)
+    async def serve_index():
+        """Serve the GroceryAI SPA root page."""
+        return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+
+    # Mount all other static assets (JS, CSS, images, manifest, etc.)
+    # The mount must come last — it acts as a catch-all for unmatched paths.
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+else:
+    logger.warning(
+        "Frontend directory not found (checked %s). "
+        "Running as API-only — set FRONTEND_DIR env var if needed.",
+        _FRONTEND_CANDIDATES,
     )

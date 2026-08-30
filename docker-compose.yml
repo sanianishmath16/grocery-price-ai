@@ -16,6 +16,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        BUILD_TARGET: dev
     container_name: groceryai-api
     # Port 8000 is intentionally NOT published to the host — nginx proxies to
     # it internally.  Expose it only if you need direct API access for testing:

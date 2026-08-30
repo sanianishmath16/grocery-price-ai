@@ -13,10 +13,12 @@
 #
 #   docker build --build-arg BUILD_TARGET=prod -t groceryai .
 #
-# Default build (no arg) produces the API-only image used by docker-compose.
+# Default build (no arg, or Render manual-service without build args) produces
+# the prod image so the frontend is ALWAYS served correctly on Render.
+# docker-compose overrides this with BUILD_TARGET=dev (API-only container).
 # ─────────────────────────────────────────────────────────────────────────────
 
-ARG BUILD_TARGET=dev
+ARG BUILD_TARGET=prod
 
 # ── Stage 1: Python deps ──────────────────────────────────────────────────────
 FROM python:3.11-slim AS python-deps
