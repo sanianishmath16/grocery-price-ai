@@ -1,4 +1,4 @@
-﻿/**
+/**
  * app.js ΓÇö GroceryAI frontend logic (v3 ΓÇö with image search)
  *
  * TEXT SEARCH API  (unchanged):
