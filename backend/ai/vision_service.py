@@ -207,6 +207,8 @@ _BRAND_NAMES = [
     "lizol", "colin", "scotch brite",
 ]
 _BRAND_NAMES.sort(key=len, reverse=True)
+# Fast lookup set for brand matching in _match_text_to_products Pass 1
+_BRAND_NAMES_SET: frozenset = frozenset(_BRAND_NAMES)
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +400,32 @@ def _image_likely_has_text(pil_img) -> bool:
         return True   # if check fails, run OCR anyway (safe default)
 
 
+# Names that are purely fresh produce/fruit — no label to read, no brand text.
+# When ALL visual hits are in this set, OCR should not run because any OCR
+# output will come from background text, not from a product label.
+_PRODUCE_NAMES: frozenset = frozenset([
+    "Tomato", "Capsicum", "Carrot", "Pumpkin", "Lemon", "Banana", "Mango",
+    "Broccoli", "Cabbage", "Spinach", "Cucumber", "Brinjal", "Beetroot",
+    "Onion", "Sweet Corn", "Apple", "Orange", "Grapes", "Strawberry",
+    "Cauliflower", "Potato",
+])
+
+
+def _all_produce(visual_hits: Dict[str, float]) -> bool:
+    """
+    Return True if every visual hit is a fresh produce/fruit name.
+
+    When this is True the image is a fresh-produce photo with no packaged
+    products, so OCR will only find background labels (false positives).
+    Returns False when the visual hits dict is empty so that OCR can still
+    run on a purely text-based image (e.g. a photo of a Maggi packet where
+    the colour recognizer finds nothing).
+    """
+    if not visual_hits:
+        return False   # no visual evidence → let OCR try
+    return all(name in _PRODUCE_NAMES for name in visual_hits)
+
+
 def _process_single_image_hybrid(
     image_bytes: bytes,
     img_idx: int,
@@ -426,11 +454,27 @@ def _process_single_image_hybrid(
             )
 
     # ── STEP 2: OCR extraction (skip if image has no text-like regions) ───
-    # Heuristic: check whether the image has high-contrast, sharp horizontal
-    # or vertical edges typical of printed text.  This avoids running 3 full
-    # Tesseract passes on raw vegetable photos (which contain no useful text).
+    # Two-gate system: BOTH gates must pass before OCR runs.
+    #
+    # Gate A — Laplacian text-likelihood heuristic: skip OCR when the image
+    #   has no sharp high-contrast edges typical of printed text (e.g. a photo
+    #   of loose vegetables on a plain surface).
+    #
+    # Gate B — Produce-only guard (NEW): if all visual hits are fresh produce/
+    #   fruits, skip OCR entirely.  Fresh produce has no printed label, so any
+    #   OCR match on such an image comes from background packaging/text and is
+    #   a false positive.  This is the most common source of a spurious 4th
+    #   product when the image contains exactly 3 vegetables.
     ocr_hits: Dict[str, float] = {}
-    if _image_likely_has_text(img):
+    _skip_ocr_reason = ""
+    if _all_produce(visual_hits):
+        _skip_ocr_reason = "all-produce image (no product labels expected)"
+    elif not _image_likely_has_text(img):
+        _skip_ocr_reason = "no text-like regions detected"
+
+    if _skip_ocr_reason:
+        logger.debug("Image %d: skipping OCR — %s", img_idx, _skip_ocr_reason)
+    else:
         img_gray = img.convert("L")
         img_gray = ImageEnhance.Contrast(img_gray).enhance(2.2)
         img_gray = ImageEnhance.Sharpness(img_gray).enhance(2.0)
@@ -459,8 +503,6 @@ def _process_single_image_hybrid(
             for p in ocr_results:
                 existing = ocr_hits.get(p.name, 0.0)
                 ocr_hits[p.name] = max(existing, p.confidence)
-    else:
-        logger.debug("Image %d: no text regions detected — skipping OCR", img_idx)
 
     # ── STEP 3: Fusion ────────────────────────────────────────────────────
     return _fuse_results(visual_hits, ocr_hits, img_idx)
@@ -536,13 +578,28 @@ def _normalise_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+# Terms that are too short / too generic to be safe as standalone OCR matches.
+# These single words appear in everyday printed text (grocery bags, shelf labels,
+# nutritional panels) and cause Pass 1 false positives.  They are only allowed
+# in _BRAND_NAMES lookups (Pass 2), where more context is required.
+_OCR_BLOCKED_SINGLE_TERMS: frozenset = frozenset([
+    "sugar", "rin", "vim", "tide", "mars",
+    "cdm",   # too short — collision with random text
+])
+
+
 def _match_text_to_products(raw_text: str, img_idx: int) -> List[DetectedProduct]:
     """
     Match OCR text against the grocery KB.
 
-    Returns at most 3 matches — real product labels rarely have more than
-    2-3 distinct brand/product terms.  Raising the minimum score prevents
-    weak token-overlap matches from adding phantom products.
+    Anti-hallucination rules applied here:
+    1. Blocked single-word terms: short/common words that appear in generic
+       printed text are skipped in Pass 1 (they live in Pass 2 brand matching
+       where more context is available).
+    2. Multi-word term requirement: Pass 1 requires at least 2 tokens in the
+       matched term to count.  This prevents generic single words from firing.
+    3. Minimum confidence 0.60 — filters out all Pass 3 noise.
+    4. Cap at 3 — real product labels rarely have more than 3 distinct brands.
     """
     norm_text = _normalise_text(raw_text)
     if not norm_text:
@@ -550,12 +607,24 @@ def _match_text_to_products(raw_text: str, img_idx: int) -> List[DetectedProduct
 
     found: Dict[str, float] = {}
 
-    # Pass 1: full term match (score 0.90) — very reliable
+    # Pass 1: full multi-word term match (score 0.90) — very reliable.
+    # SINGLE-word terms are skipped here to prevent generic words like "sugar"
+    # or "rin" appearing in unrelated OCR output from firing at 0.90.
     for term, (canonical, _) in _TERM_INDEX.items():
+        if term in _OCR_BLOCKED_SINGLE_TERMS:
+            continue   # deferred to Pass 2 with brand-context check
+        # Require term to have at least 2 tokens (multi-word) OR be a clear brand
+        # name (no spaces but >= 5 characters and in _BRAND_NAMES list)
+        term_tokens = term.split()
+        is_brand = term in _BRAND_NAMES_SET
+        is_multi_word = len(term_tokens) >= 2
+        if not is_brand and not is_multi_word:
+            continue   # single generic word — skip Pass 1
         if term in norm_text:
             found[canonical] = max(found.get(canonical, 0.0), 0.90)
 
-    # Pass 2: brand-only match (score 0.65) — reliable when brand name is clear
+    # Pass 2: brand-only match (score 0.65) — reliable when brand name is clear.
+    # Only fires if Pass 1 found nothing, to avoid doubling hits.
     if not found:
         for brand in _BRAND_NAMES:
             if brand in norm_text:
@@ -563,21 +632,27 @@ def _match_text_to_products(raw_text: str, img_idx: int) -> List[DetectedProduct
                 if canonical:
                     found[canonical] = max(found.get(canonical, 0.0), 0.65)
 
-    # Pass 3: token overlap — only fire when passes 1+2 both missed, and require
-    # a higher overlap fraction (0.75) and a higher minimum score (0.60) to
-    # prevent weak partial matches from generating phantom products.
+    # Pass 3: token overlap — last resort, only when passes 1+2 both found nothing.
+    # Apply the same single-term filter as Pass 1: skip blocked and single non-brand
+    # terms to prevent common words ("sugar", "oil", "salt") from firing here.
     if not found:
         text_tokens = set(norm_text.split())
         for term, (canonical, _) in _TERM_INDEX.items():
-            term_tokens = set(term.split())
-            if not term_tokens:
+            if term in _OCR_BLOCKED_SINGLE_TERMS:
                 continue
-            overlap = len(term_tokens & text_tokens) / len(term_tokens)
+            term_tokens_set = set(term.split())
+            if not term_tokens_set:
+                continue
+            # Skip single-word non-brand terms (same rule as Pass 1)
+            is_brand_p3 = term in _BRAND_NAMES_SET
+            if not is_brand_p3 and len(term_tokens_set) < 2:
+                continue
+            overlap = len(term_tokens_set & text_tokens) / len(term_tokens_set)
             if overlap >= 0.75:
-                score = 0.65 * overlap   # min score is now 0.65*0.75=0.4875 → filtered below
+                score = 0.65 * overlap
                 found[canonical] = max(found.get(canonical, 0.0), score)
 
-    # Minimum confidence: 0.60 (was 0.50) — tighter to avoid weak OCR noise
+    # Minimum confidence: 0.60 — filters all Pass 3 noise and any borderline hits
     products = [
         DetectedProduct(name=name, confidence=round(conf, 2),
                         from_image_index=img_idx, source="ocr")

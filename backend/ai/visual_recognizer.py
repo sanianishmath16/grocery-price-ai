@@ -78,44 +78,51 @@ _COLOUR_PROFILES: List[Tuple[str, int, int, int, int, int, float]] = [
     # Capsicum (red)
     ("Capsicum",      0,   14, 130, 70, 255, 0.72),
     ("Capsicum",    242,  255, 130, 70, 255, 0.72),
-    # Capsicum (green)
-    ("Capsicum",     60,  100, 100, 60, 220, 0.65),
-    # Carrot: vivid orange
+    # Capsicum (green) — tightened sat_lo 100→120 to avoid plain dark green backgrounds
+    ("Capsicum",     62,   95, 120, 70, 210, 0.65),
+    # Carrot: vivid orange — hue 15–30, well separated from yellow group (starts at 38)
     ("Carrot",       15,   30, 160, 100, 255, 0.82),
-    # Pumpkin / Squash: deep orange
-    ("Pumpkin",      18,   35, 140, 80, 230, 0.72),
-    # Lemon / Lime: bright yellow-green
-    ("Lemon",        35,   55, 130, 140, 255, 0.78),
-    # Banana: yellow
-    ("Banana",       30,   50, 130, 150, 255, 0.80),
-    # Mango: yellow-orange
-    ("Mango",        22,   42, 150, 130, 255, 0.75),
-    # Broccoli / Cabbage: dark green
-    ("Broccoli",     58,   90, 90,  40, 160, 0.72),
-    ("Cabbage",      60,   95, 80,  50, 170, 0.68),
-    # Spinach / Leafy greens: deep saturated green
-    ("Spinach",      55,   85, 100, 30, 130, 0.72),
-    # Cucumber: medium green
-    ("Cucumber",     60,   95, 80,  60, 190, 0.68),
+    # Pumpkin / Squash: deep orange — tightened to 18–30 (was 18–35) to avoid
+    # overlap with Banana/Lemon at hue 30–35.  At hue 30–35 with sat>=140 this
+    # is ambiguous orange-yellow; exclude rather than guess wrong.
+    ("Pumpkin",      18,   30, 145, 80, 225, 0.72),
+    # Lemon / Lime: bright yellow-green — tightened to 40–55 (was 35–55) so
+    # it no longer overlaps with Carrot/Pumpkin group at hue 35–40.
+    ("Lemon",        40,   55, 135, 145, 255, 0.78),
+    # Banana: clearly yellow — tightened to 38–50 (was 30–50) to avoid
+    # overlap with the orange group (Carrot/Pumpkin/Mango) at hue 30–38.
+    ("Banana",       38,   50, 135, 155, 255, 0.80),
+    # Mango: yellow-orange — tightened to 22–36 (was 22–42) to stay strictly
+    # in orange group territory and not cross into yellow group at hue 36–42.
+    ("Mango",        22,   36, 155, 130, 255, 0.75),
+    # Broccoli: dark green — tightened val_hi 160→145 to prevent dark green
+    # backgrounds/shadows (which typically have val 130–180) from firing.
+    ("Broccoli",     58,   88, 95,  50, 145, 0.72),
+    # Cabbage: medium green — tightened sat_lo 80→95 and val range
+    ("Cabbage",      62,   92, 95,  55, 160, 0.68),
+    # Spinach / Leafy greens: deep saturated green — tightened sat_lo 100→110
+    ("Spinach",      57,   83, 110, 35, 125, 0.72),
+    # Cucumber: medium-bright green — raise val_lo 60→80 (dark green is background)
+    ("Cucumber",     62,   92, 85,  80, 185, 0.68),
     # Eggplant / Brinjal: dark purple
-    ("Brinjal",     185,  220, 80,  20, 110, 0.75),
+    ("Brinjal",     185,  220, 85,  25, 105, 0.75),
     # Beetroot: dark red-purple
-    ("Beetroot",    220,  245, 90,  30, 120, 0.72),
+    ("Beetroot",    222,  243, 95,  35, 115, 0.72),
     # Onion (red): purple-red hues
-    ("Onion",       200,  240, 70,  40, 160, 0.70),
-    # Corn: vivid yellow (narrow band)
-    ("Sweet Corn",   38,   52, 120, 160, 255, 0.74),
+    ("Onion",       202,  238, 75,  45, 155, 0.70),
+    # Corn: vivid yellow (narrow band) — unchanged, already narrow
+    ("Sweet Corn",   38,   52, 120, 165, 255, 0.74),
     # ── Fruits ───────────────────────────────────────────────────────────
     # Apple (red) — colour group dedup keeps highest-conf per red band
-    ("Apple",         0,   14, 120, 60, 255, 0.70),
-    ("Apple",       242,  255, 120, 60, 255, 0.70),
+    ("Apple",         0,   14, 120, 65, 255, 0.70),
+    ("Apple",       242,  255, 120, 65, 255, 0.70),
     # Orange — distinct saturation from Carrot
-    ("Orange",       14,   28, 160, 120, 255, 0.80),
+    ("Orange",       14,   28, 165, 125, 255, 0.80),
     # Grapes: purple band
-    ("Grapes",      185,  225, 70,  30, 150, 0.72),
+    ("Grapes",      185,  223, 75,  35, 145, 0.72),
     # Strawberry: red, slightly lower sat than Tomato
-    ("Strawberry",    0,   14, 110, 80, 230, 0.72),
-    ("Strawberry",  242,  255, 110, 80, 230, 0.72),
+    ("Strawberry",    0,   13, 115, 85, 225, 0.72),
+    ("Strawberry",  243,  255, 115, 85, 225, 0.72),
 ]
 # Cauliflower/Garlic/Potato/Milk are handled exclusively by _LOW_SAT_PROFILES
 # (stricter hit-fraction thresholds) to prevent white backgrounds triggering them.
