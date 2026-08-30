@@ -148,12 +148,19 @@ function stopStepAnimation() {
 
 function setTextLoading(on) {
   loadingSection.classList.toggle("hidden", !on);
-  formSection.classList.toggle("hidden", on);
+  // When the device panel is present (desktop), keep formSection visible so the
+  // device itself acts as the loading indicator via setDeviceState().
+  const hasDevice = !!document.getElementById("scanner-device");
+  if (!hasDevice) formSection.classList.toggle("hidden", on);
   compareBtn.disabled = on;
   compareBtn.querySelector(".btn-text").classList.toggle("hidden", on);
   compareBtn.querySelector(".btn-loading").classList.toggle("hidden", !on);
-  if (on) startStepAnimation("#loading-section");
-  else    stopStepAnimation();
+  if (on) {
+    startStepAnimation("#loading-section");
+    setDeviceState("scanning");
+  } else {
+    stopStepAnimation();
+  }
 }
 
 function setImageLoading(on) {
@@ -408,6 +415,13 @@ function renderCompareResults(data, cardsEl, bdSec, tipEl, resultsSec) {
 
   resultsSec.classList.remove("hidden");
   resultsSec.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  // ── Scanner device display (text-search path) ──────────────────────────
+  // The device panel lives in #form-section and is always visible on desktop.
+  // renderScannerResults does all the laser/barcode/staggered animation.
+  if (document.getElementById("scanner-device")) {
+    renderScannerResults(data);
+  }
 }
 
 function buildAppCard(app, rank) {
@@ -517,6 +531,7 @@ function resetForm() {
   showPincodeErr(pincodeError, pincodeInput, false);
   window.scrollTo({ top: 0, behavior: "smooth" });
   itemsInput.focus();
+  resetDeviceScreen();
 }
 
 // ─── IMAGE SEARCH ─────────────────────────────────────────────────────────────
@@ -758,4 +773,263 @@ function resetImageSearch() {
   showPincodeErr(imgPincodeError, imgPincodeInput, false);
   visionNotice.classList.add("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SCANNER DEVICE — purely visual presentation layer
+// Hooks: renderScannerResults(data), setDeviceState(state), resetDeviceScreen()
+// No API calls. No form logic. Respects prefers-reduced-motion.
+// ════════════════════════════════════════════════════════════════════════════
+
+const _prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Brand color map for price chips + total dots
+const APP_BRAND_COLORS = {
+  blinkit:   "#F8D030",
+  zepto:     "#8219C8",
+  instamart: "#E07014",
+  flipkart:  "#2874F0",
+};
+
+/**
+ * Drive the device LED + status label.
+ * state: "idle" | "scanning" | "done"
+ */
+function setDeviceState(state) {
+  const led   = document.getElementById("device-led");
+  const label = document.getElementById("device-status-label");
+  if (!led || !label) return;
+  led.className   = "device-led " + state;
+  label.textContent = state === "idle" ? "Ready" : state === "scanning" ? "Scanning…" : "Complete";
+}
+
+/**
+ * Reset the device screen back to the idle/empty state.
+ * Called by resetForm().
+ */
+function resetDeviceScreen() {
+  const idle    = document.getElementById("screen-idle");
+  const readout = document.getElementById("screen-readout");
+  const totals  = document.getElementById("screen-totals");
+  const savings = document.getElementById("screen-savings");
+  if (idle)    idle.classList.remove("hidden");
+  if (readout) { readout.classList.add("hidden"); readout.innerHTML = ""; }
+  if (totals)  { totals.classList.add("hidden");  totals.innerHTML  = ""; }
+  if (savings) savings.classList.add("hidden");
+  setDeviceState("idle");
+}
+
+/**
+ * Generate a decorative barcode SVG element for a given text seed.
+ * Bar widths are seeded from the item name so the same item always
+ * gets the same barcode pattern. Purely decorative.
+ */
+function buildBarcode(seed) {
+  // Simple deterministic sequence from char codes
+  let n = 0;
+  for (let i = 0; i < seed.length; i++) n = (n * 31 + seed.charCodeAt(i)) >>> 0;
+
+  const container = document.createElement("div");
+  container.className = "scan-barcode";
+  container.setAttribute("aria-hidden", "true");
+
+  // Generate 14–18 bars of varying height (60–100%) and width (1–3px)
+  const numBars = 14 + (n % 5);
+  for (let i = 0; i < numBars; i++) {
+    n = (n * 1664525 + 1013904223) >>> 0;  // LCG step
+    const bar = document.createElement("div");
+    bar.className = "scan-barcode-bar";
+    const h = 55 + (n % 45);              // 55–100%
+    const w = 1 + (n % 3);               // 1–3px
+    bar.style.height  = h + "%";
+    bar.style.width   = w + "px";
+    container.appendChild(bar);
+  }
+  return container;
+}
+
+/**
+ * Main scanner renderer.
+ * Called after a successful /api/compare response on the text-search tab.
+ *
+ * Sequence:
+ *   1. Show laser sweep animation
+ *   2. After sweep (~900ms), hide idle screen, show readout
+ *   3. Reveal each item row one-by-one with 180ms stagger
+ *   4. After all items, show totals + savings tip
+ *   5. Set LED to "done"
+ */
+function renderScannerResults(data) {
+  const laserEl   = document.getElementById("laser-line");
+  const idle      = document.getElementById("screen-idle");
+  const readout   = document.getElementById("screen-readout");
+  const totalsEl  = document.getElementById("screen-totals");
+  const savingsEl = document.getElementById("screen-savings");
+  if (!laserEl || !readout) return;
+
+  // Clear previous run
+  readout.innerHTML = "";
+  readout.classList.add("hidden");
+  if (totalsEl)  { totalsEl.classList.add("hidden"); totalsEl.innerHTML = ""; }
+  if (savingsEl) savingsEl.classList.add("hidden");
+
+  setDeviceState("scanning");
+
+  // Build item rows for each query item × each app
+  // Structure: per query_item → show all app prices as chips
+  const items = (data.query_items || []).map(qi => qi);
+  const results = data.results || [];
+
+  // For each item, compute min price across apps (to mark cheapest chip)
+  const itemRows = items.map((item) => {
+    const appPrices = results.map(app => {
+      const match = app.matches && (
+        app.matches.find(m => m.query && m.query.toLowerCase().includes(item.name.toLowerCase()))
+        || app.matches[items.indexOf(item)]
+      );
+      return {
+        appName: app.app_name,
+        found:   match && match.found,
+        price:   match && match.found ? match.price : null,
+      };
+    });
+    const foundPrices = appPrices.filter(a => a.found && a.price != null).map(a => a.price);
+    const minPrice = foundPrices.length ? Math.min(...foundPrices) : null;
+    return { item, appPrices, minPrice };
+  });
+
+  // ── Step 1: laser sweep ───────────────────────────────────────────────────
+  const SWEEP_MS  = _prefersReducedMotion ? 0  : 900;
+  const STAGGER   = _prefersReducedMotion ? 0  : 180;
+  const TOTALS_DELAY = _prefersReducedMotion ? 0 : 200;
+
+  if (!_prefersReducedMotion) {
+    laserEl.classList.remove("sweeping");
+    // force reflow to restart animation
+    void laserEl.offsetWidth;
+    laserEl.classList.add("sweeping");
+  }
+
+  setTimeout(() => {
+    // ── Step 2: hide idle, show readout ──────────────────────────────────
+    if (idle) idle.classList.add("hidden");
+    readout.classList.remove("hidden");
+
+    // ── Step 3: build and stagger items ──────────────────────────────────
+    itemRows.forEach(({ item, appPrices, minPrice }, rowIdx) => {
+      const row = document.createElement("div");
+      row.className = "scan-item";
+
+      // Header: barcode + item name + confirm beep
+      const header = document.createElement("div");
+      header.className = "scan-item-header";
+
+      const bc = buildBarcode(item.raw || item.name);
+      header.appendChild(bc);
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "scan-item-name";
+      nameEl.textContent = (item.raw || item.name).toUpperCase();
+      header.appendChild(nameEl);
+
+      const confirmEl = document.createElement("span");
+      confirmEl.className = "scan-confirm";
+      confirmEl.textContent = "✔ SCAN";
+      header.appendChild(confirmEl);
+
+      row.appendChild(header);
+
+      // Price chips grid
+      const chipsGrid = document.createElement("div");
+      chipsGrid.className = "scan-prices";
+
+      appPrices.forEach(({ appName, found, price }) => {
+        const chip = document.createElement("div");
+        chip.className = "price-chip" +
+          (found && price != null && minPrice != null && Math.abs(price - minPrice) < 0.001 ? " cheapest" : "") +
+          (!found ? " not-found" : "");
+
+        const dot = document.createElement("span");
+        dot.className = "price-chip-dot";
+        dot.style.background = APP_BRAND_COLORS[appName] || "#666";
+        chip.appendChild(dot);
+
+        const lbl = document.createElement("span");
+        lbl.className = "price-chip-label";
+        lbl.textContent = APP_CONFIG[appName]?.label || appName;
+        chip.appendChild(lbl);
+
+        const val = document.createElement("span");
+        val.className = "price-chip-value";
+        val.textContent = found && price != null ? formatPrice(price) : "—";
+        chip.appendChild(val);
+
+        chipsGrid.appendChild(chip);
+      });
+
+      row.appendChild(chipsGrid);
+      readout.appendChild(row);
+
+      // Staggered reveal
+      setTimeout(() => row.classList.add("visible"), SWEEP_MS * 0 + rowIdx * STAGGER + 20);
+    });
+
+    // ── Step 4: totals + savings ──────────────────────────────────────────
+    const lastItemDelay = itemRows.length * STAGGER + TOTALS_DELAY;
+    setTimeout(() => {
+      if (totalsEl) {
+        totalsEl.innerHTML = "";
+
+        const hdr = document.createElement("div");
+        hdr.className = "totals-heading";
+        hdr.textContent = "── Cart Total ──";
+        totalsEl.appendChild(hdr);
+
+        results.forEach((app, idx) => {
+          const isBest = idx === 0;
+          const row = document.createElement("div");
+          row.className = "total-row" + (isBest ? " best" : "");
+
+          const dot = document.createElement("span");
+          dot.className = "total-app-dot";
+          dot.style.background = APP_BRAND_COLORS[app.app_name] || "#666";
+          row.appendChild(dot);
+
+          const name = document.createElement("span");
+          name.className = "total-app-name";
+          name.textContent = APP_CONFIG[app.app_name]?.label || app.app_name;
+          row.appendChild(name);
+
+          if (isBest) {
+            const tag = document.createElement("span");
+            tag.className = "total-best-tag";
+            tag.textContent = "BEST";
+            row.appendChild(tag);
+          }
+
+          const delivery = document.createElement("span");
+          delivery.className = "total-delivery";
+          delivery.textContent = app.delivery_fee > 0 ? `+${formatPrice(app.delivery_fee)} del` : "free del";
+          row.appendChild(delivery);
+
+          const price = document.createElement("span");
+          price.className = "total-price";
+          price.textContent = formatPrice(app.total_price);
+          row.appendChild(price);
+
+          totalsEl.appendChild(row);
+        });
+
+        totalsEl.classList.remove("hidden");
+      }
+
+      if (savingsEl && data.savings_tip) {
+        savingsEl.textContent = data.savings_tip;
+        savingsEl.classList.remove("hidden");
+      }
+
+      setDeviceState("done");
+    }, lastItemDelay);
+
+  }, SWEEP_MS);
 }
