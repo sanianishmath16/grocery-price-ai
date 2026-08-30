@@ -27,16 +27,6 @@ WORKDIR /app
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
-# Pre-download MobileNetV3-Small weights at build time so the first request
-# is fast (no 30-second cold-start model download).
-# The weights are stored in /root/.cache/torch/hub and copied into the image.
-RUN PYTHONPATH=/install/lib/python3.11/site-packages \
-    python3 -c "\
-import sys; sys.path.insert(0, '/install/lib/python3.11/site-packages'); \
-import torchvision.models as m; \
-m.mobilenet_v3_small(weights=m.MobileNet_V3_Small_Weights.IMAGENET1K_V1); \
-print('MobileNetV3-Small weights cached OK')"
-
 # ── Stage 2: API-only (used by docker-compose 'api' service) ─────────────────
 FROM python:3.11-slim AS dev
 
@@ -68,9 +58,6 @@ WORKDIR /app
 
 # Python packages
 COPY --from=python-deps /install /usr/local
-
-# Pre-cached model weights from the build stage
-COPY --from=python-deps /root/.cache/torch /root/.cache/torch
 
 # FastAPI backend
 COPY backend/ ./

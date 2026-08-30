@@ -190,7 +190,17 @@ async def analyze_images(body: ImageAnalyzeRequest):
     logger.info("Analyzing %d images for pincode %s", len(body.images_b64), body.pincode)
 
     # --- 1. Run vision service ---
-    vision_result = await identify_products(body.images_b64)
+    try:
+        vision_result = await identify_products(body.images_b64)
+    except Exception as exc:
+        logger.exception("Unhandled exception in vision pipeline: %s", exc)
+        return ImageAnalyzeResponse(
+            vision_status=VisionStatus.ERROR.value,
+            error_message=(
+                "Image analysis encountered an unexpected error. "
+                "Please try again, or use Text Search to compare prices."
+            ),
+        )
 
     # All non-OK statuses: return early with the user-friendly message.
     # These include: NOT_CONFIGURED, QUOTA_EXHAUSTED, RATE_LIMITED, AUTH_ERROR,

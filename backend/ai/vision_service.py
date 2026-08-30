@@ -243,6 +243,18 @@ async def identify_products(images_b64: List[str]) -> VisionResult:
 
 
 # ---------------------------------------------------------------------------
+# Noop recognizer — used when visual_recognizer fails to import
+# ---------------------------------------------------------------------------
+
+class _NoopRecognizer:
+    """Stub recognizer that always returns empty results (OCR-only mode)."""
+    available = False
+
+    def classify(self, _pil_image):
+        return []
+
+
+# ---------------------------------------------------------------------------
 # Free hybrid pipeline
 # ---------------------------------------------------------------------------
 
@@ -253,17 +265,53 @@ async def _identify_via_hybrid(images_b64: List[str]) -> VisionResult:
     return await loop.run_in_executor(None, _sync_hybrid_pipeline, images_b64)
 
 
+def _resize_image_bytes(image_bytes: bytes, max_px: int = 800) -> bytes:
+    """
+    Resize image so its longest edge is at most max_px, preserving aspect ratio.
+    Returns original bytes if resize is not needed or fails.
+    This prevents processing huge phone photos and reduces memory usage.
+    """
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        w, h = img.size
+        if max(w, h) <= max_px:
+            return image_bytes   # already small enough
+        scale = max_px / max(w, h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=85)
+        resized = buf.getvalue()
+        logger.debug(
+            "Resized image from %dx%d to %dx%d (%.1f KB → %.1f KB)",
+            w, h, new_w, new_h,
+            len(image_bytes) / 1024,
+            len(resized) / 1024,
+        )
+        return resized
+    except Exception as exc:
+        logger.warning("Image resize failed, using original: %s", exc)
+        return image_bytes
+
+
 def _sync_hybrid_pipeline(images_b64: List[str]) -> VisionResult:
     """
     Synchronous hybrid pipeline.
     For each image:
-      1. Run visual recognizer (MobileNetV3-Small, multi-crop)
-      2. Run OCR matcher (Tesseract + keyword KB)
-      3. Fuse results: prefer visual for fresh produce, OCR for branded items
-      4. Deduplicate across images
+      1. Resize to max 800px (prevents OOM on large phone photos)
+      2. Run visual recognizer (colour-based, multi-crop)
+      3. Run OCR matcher (Tesseract + keyword KB)
+      4. Fuse results: prefer visual for fresh produce, OCR for branded items
+      5. Deduplicate across images
     """
-    from ai.visual_recognizer import get_recognizer
-    recognizer = get_recognizer()
+    try:
+        from ai.visual_recognizer import get_recognizer
+        recognizer = get_recognizer()
+    except Exception as exc:
+        logger.error("Failed to initialise visual recognizer: %s", exc)
+        # Still continue — OCR-only pipeline will handle packaged products
+        recognizer = _NoopRecognizer()
 
     all_products: List[DetectedProduct] = []
     seen_names: set = set()
@@ -271,6 +319,7 @@ def _sync_hybrid_pipeline(images_b64: List[str]) -> VisionResult:
     for img_idx, b64 in enumerate(images_b64):
         try:
             raw = base64.b64decode(b64)
+            raw = _resize_image_bytes(raw, max_px=800)
             products = _process_single_image_hybrid(raw, img_idx, recognizer)
             for p in products:
                 key = p.name.lower()
@@ -315,12 +364,7 @@ def _process_single_image_hybrid(
     from PIL import Image, ImageEnhance, ImageFilter
 
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-    # ── Preprocessing ─────────────────────────────────────────────────────
-    w, h = img.size
-    if max(w, h) < 800:
-        scale = 800 / max(w, h)
-        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+    # Image is already resized to ≤800px by _resize_image_bytes before this call.
 
     # ── STEP 1: Visual recognition (no text needed) ───────────────────────
     visual_hits: Dict[str, float] = {}

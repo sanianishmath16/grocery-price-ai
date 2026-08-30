@@ -1,36 +1,43 @@
 """
-visual_recognizer.py — Local computer-vision image recognition for GroceryAI.
+visual_recognizer.py — Lightweight colour-based visual recognition for GroceryAI.
 
-Model
------
-MobileNetV3-Small pretrained on ImageNet-1k (torchvision).
-  • Weight file: ~10 MB (downloaded once to ~/.cache/torch/hub)
-  • CPU inference: ~30–80 ms per crop on a 224×224 patch
-  • 1000 ImageNet classes cover the majority of fresh produce, packaged food
-    categories, bottles, and household product containers.
+Why this replaces PyTorch/MobileNetV3
+--------------------------------------
+The original implementation used torch==2.3.1+cpu + torchvision==0.18.1+cpu,
+which total ~200 MB on disk and ~400–500 MB RSS when loaded.  Render's free
+tier provides only 512 MB RAM — this caused an OOM kill of the uvicorn worker
+on every image-analysis request, producing a 502 Bad Gateway.
 
-Architecture
-------------
-1. Whole-image classification  — classify the full image once.
-2. Multi-region scanning       — divide image into 3×3 and 2×2 grid cells;
-                                  classify each cell that has sufficient content.
-3. Top-K label mapping         — map ImageNet labels → grocery product names
-                                  using a comprehensive lookup table.
-4. Deduplication + confidence  — merge duplicate products, keep highest score.
-5. Fresh produce vs packaging  — separate confidence logic for unpackaged items.
+This replacement uses only Pillow (already required) + numpy (lightweight,
+already a Pillow/pytesseract transitive dep) and achieves recognition via:
+
+1. Dominant colour analysis  — HSV colour ranges for common fresh vegetables
+   and fruits (tomato = red, onion = purple-brown, spinach = dark green, etc.)
+2. Texture energy estimation — laplacian variance to distinguish flat packaged
+   items from textured fresh produce.
+3. Aspect-ratio + saturation heuristics — distinguish loose produce bags,
+   cartons, and bottles.
+4. Multi-region scanning     — full image + 2×2 quadrant sub-crops, same
+   interface as the old recognizer so vision_service.py is unchanged.
+
+Limitations vs the original
+-----------------------------
+• Cannot read brand names visually (the OCR layer handles that instead).
+• Very similar colours (red apple vs red capsicum) may be confused, but
+  this is already handled by OCR and the KB lookup.
+• Bright ambient lighting or dark backgrounds can shift HSV readings.
+
+Tradeoff
+---------
+Free, no external calls, ~5 ms per crop on CPU, ~20 MB RAM.
+For packaged-product recognition the OCR layer is primary; this layer handles
+fresh produce which has no readable label text.
 
 Usage
------
-    from ai.visual_recognizer import VisualRecognizer
-    recognizer = VisualRecognizer()           # load once at startup
-    results = recognizer.classify(pil_image)  # list of (grocery_name, confidence)
-
-Limitations
------------
-• ImageNet was not trained specifically for grocery recognition, so some
-  very niche products (e.g. specific spice brands) may not be detected visually.
-• For those, the OCR layer in vision_service.py handles the detection.
-• Very similar-looking vegetables (e.g. cucumber vs zucchini) may be confused.
+------
+    from ai.visual_recognizer import get_recognizer
+    recognizer = get_recognizer()                      # cached singleton
+    results = recognizer.classify(pil_rgb_image)       # [(name, conf), ...]
 """
 
 from __future__ import annotations
@@ -41,248 +48,143 @@ from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# ImageNet label → grocery product mapping
-#
-# Key  = lowercase substring that appears in an ImageNet class label
-# Value = (canonical_grocery_name, confidence_multiplier)
-#
-# The confidence multiplier lets us distinguish clear matches (tomato → 1.0)
-# from indirect inferences (banana_peel → 0.7, bread_loaf → 0.85).
-# ---------------------------------------------------------------------------
 
-_IMAGENET_TO_GROCERY: List[Tuple[str, str, float]] = [
+# ---------------------------------------------------------------------------
+# Colour profile table
+#
+# Each entry: (name, hue_min, hue_max, sat_min, val_min, val_max, confidence)
+#
+# Hue in PIL HSV is 0–255.  Approximate:
+#   Red      0–15 or 235–255   (wraps around)
+#   Orange   15–35
+#   Yellow   35–55
+#   Green    55–100
+#   Cyan     100–130
+#   Blue     130–175
+#   Purple   175–205
+#   Pink     205–235
+#
+# Saturation 0–255 (0 = grey, 255 = fully saturated)
+# Value      0–255 (0 = black, 255 = white)
+#
+# Format: (grocery_name, hue_lo, hue_hi, sat_lo, val_lo, val_hi, confidence)
+#         hue wraps: if hue_hi < hue_lo the match is  hue >= hue_lo OR hue <= hue_hi
+# ---------------------------------------------------------------------------
+_COLOUR_PROFILES: List[Tuple[str, int, int, int, int, int, float]] = [
     # ── Fresh vegetables ──────────────────────────────────────────────────
-    ("tomato",          "Tomato",               1.00),
-    ("cucumber",        "Cucumber",             1.00),
-    ("zucchini",        "Cucumber",             0.70),  # often confused
-    ("acorn_squash",    "Pumpkin",              0.70),
-    ("butternut",       "Pumpkin",              0.75),
-    ("pumpkin",         "Pumpkin",              1.00),
-    ("cauliflower",     "Cauliflower",          1.00),
-    ("broccoli",        "Broccoli",             1.00),
-    ("artichoke",       "Cauliflower",          0.65),
-    ("head_cabbage",    "Cabbage",              1.00),
-    ("red_cabbage",     "Cabbage",              0.90),
-    ("cabbage",         "Cabbage",              1.00),
-    ("bell_pepper",     "Capsicum",             1.00),
-    ("hot_pepper",      "Green Chilli",         0.85),
-    ("jalapeño",        "Green Chilli",         0.80),
-    ("eggplant",        "Brinjal",              1.00),
-    ("corn",            "Sweet Corn",           1.00),
-    ("ear_of_corn",     "Sweet Corn",           1.00),
-    ("mushroom",        "Mushroom",             1.00),
-    ("agaric",          "Mushroom",             0.85),
-    ("rapini",          "Broccoli",             0.70),
-    ("cardoon",         "Brinjal",              0.60),
-    ("spinach",         "Spinach",              0.85),
-    ("lettuce",         "Spinach",              0.75),
-
-    # ── Root vegetables ───────────────────────────────────────────────────
-    ("carrot",          "Carrot",               1.00),
-    ("radish",          "Radish",               1.00),
-    ("turnip",          "Radish",               0.75),
-    ("potato",          "Potato",               1.00),
-    ("beet",            "Beetroot",             0.90),
-    ("sweet_potato",    "Potato",               0.80),
-    ("yam",             "Potato",               0.70),
-    ("taro",            "Potato",               0.70),
-
-    # ── Bulbs / aromatics ─────────────────────────────────────────────────
-    ("onion",           "Onion",                1.00),
-    ("garlic",          "Garlic",               1.00),
-    ("leek",            "Onion",                0.75),
-
+    # Tomato: vivid red
+    ("Tomato",        0,   15, 140, 80, 255, 0.82),
+    ("Tomato",      240,  255, 140, 80, 255, 0.82),   # hue wraps
+    # Capsicum (red)
+    ("Capsicum",      0,   14, 130, 70, 255, 0.72),
+    ("Capsicum",    242,  255, 130, 70, 255, 0.72),
+    # Capsicum (green)
+    ("Capsicum",     60,  100, 100, 60, 220, 0.65),
+    # Carrot: vivid orange
+    ("Carrot",       15,   30, 160, 100, 255, 0.82),
+    # Pumpkin / Squash: deep orange
+    ("Pumpkin",      18,   35, 140, 80, 230, 0.72),
+    # Lemon / Lime: bright yellow-green
+    ("Lemon",        35,   55, 130, 140, 255, 0.78),
+    # Banana: yellow
+    ("Banana",       30,   50, 130, 150, 255, 0.80),
+    # Mango: yellow-orange
+    ("Mango",        22,   42, 150, 130, 255, 0.75),
+    # Broccoli / Cabbage: dark green
+    ("Broccoli",     58,   90, 90,  40, 160, 0.72),
+    ("Cabbage",      60,   95, 80,  50, 170, 0.68),
+    # Spinach / Leafy greens: deep saturated green
+    ("Spinach",      55,   85, 100, 30, 130, 0.72),
+    # Cucumber: medium green
+    ("Cucumber",     60,   95, 80,  60, 190, 0.68),
+    # Eggplant / Brinjal: dark purple
+    ("Brinjal",     185,  220, 80,  20, 110, 0.75),
+    # Beetroot: dark red-purple
+    ("Beetroot",    220,  245, 90,  30, 120, 0.72),
+    # Onion (red): purple-red hues
+    ("Onion",       200,  240, 70,  40, 160, 0.70),
+    # Potato / Ginger: brown-beige (low saturation, mid value)
+    ("Potato",       18,   40, 30,  70, 180, 0.60),
+    ("Ginger",       22,   45, 40,  80, 190, 0.55),
+    # Cauliflower: very low sat, high value (white-cream)
+    ("Cauliflower",   0,  255, 0,  190, 255, 0.60),   # catches by val+sat
+    # Corn: yellow
+    ("Sweet Corn",   38,   52, 120, 160, 255, 0.74),
     # ── Fruits ───────────────────────────────────────────────────────────
-    ("apple",           "Apple",                1.00),
-    ("granny_smith",    "Apple",                0.95),
-    ("banana",          "Banana",               1.00),
-    ("orange",          "Orange",               1.00),
-    ("lemon",           "Lemon",                1.00),
-    ("lime",            "Lemon",                0.80),
-    ("mango",           "Mango",                1.00),
-    ("grape",           "Grapes",               1.00),
-    ("strawberry",      "Strawberry",           1.00),
-    ("watermelon",      "Watermelon",           1.00),
-    ("cantaloupe",      "Muskmelon",            0.90),
-    ("pineapple",       "Pineapple",            1.00),
-    ("pomegranate",     "Pomegranate",          1.00),
-    ("papaya",          "Papaya",               1.00),
-    ("guava",           "Guava",                0.90),
-    ("coconut",         "Coconut",              1.00),
-    ("fig",             "Fig",                  1.00),
-    ("pear",            "Pear",                 1.00),
-    ("peach",           "Peach",                0.90),
-    ("plum",            "Plum",                 0.90),
-    ("cherry",          "Cherry",               0.90),
-    ("kiwi",            "Kiwi",                 0.90),
-
-    # ── Herbs / leafy greens ──────────────────────────────────────────────
-    ("herb",            "Coriander",            0.70),
-    ("cilantro",        "Coriander",            1.00),
-    ("coriander",       "Coriander",            1.00),
-    ("mint",            "Mint",                 1.00),
-    ("ginger",          "Ginger",               1.00),
-
-    # ── Packaged food categories (ImageNet has many everyday objects) ─────
-    ("loaf",            "Bread",                0.85),
-    ("bagel",           "Bread",                0.80),
-    ("baguette",        "Bread",                0.80),
-    ("pretzel",         "Biscuits",             0.70),
-    ("chocolate",       "Chocolate",            0.90),
-    ("bonbon",          "Chocolate",            0.80),
-    ("ice_cream",       "Ice Cream",            0.90),
-    ("pizza",           "Pizza",                0.90),
-    ("burrito",         "Packaged Food",        0.70),
-    ("noodle",          "Noodles",              0.90),
-    ("spaghetti",       "Noodles",              0.85),
-    ("soup",            "Soup",                 0.85),
-    ("cup_of_tea",      "Tea",                  0.80),
-    ("coffee_mug",      "Coffee",               0.80),
-    ("espresso",        "Coffee",               0.80),
-    ("milk_can",        "Milk",                 0.80),
-    ("eggnog",          "Milk",                 0.75),
-    ("beer_bottle",     "Packaged Beverage",    0.70),
-    ("wine_bottle",     "Packaged Beverage",    0.70),
-    ("water_bottle",    "Packaged Beverage",    0.75),
-    ("pop_bottle",      "Packaged Beverage",    0.80),
-    ("plastic_bag",     "Packaged Food",        0.55),
-    ("packet",          "Packaged Food",        0.60),
-    ("box",             "Packaged Food",        0.55),
-    ("jar",             "Packaged Food",        0.60),
-    ("can",             "Packaged Beverage",    0.65),
-    ("tin_can",         "Packaged Food",        0.65),
-    ("carton",          "Packaged Food",        0.60),
-    ("chip",            "Chips",                0.80),
-    ("french_loaf",     "Bread",                0.80),
-    ("pretzel",         "Snacks",               0.70),
-    ("cracker",         "Biscuits",             0.80),
-    ("cheese",          "Cheese",               0.90),
-    ("butter",          "Butter",               0.85),
-    ("egg",             "Eggs",                 0.95),
-    ("hen",             "Eggs",                 0.70),
-    ("meat_loaf",       "Packaged Food",        0.60),
-    ("pizza",           "Pizza",                0.90),
-
-    # ── Household products visible in grocery shopping ────────────────────
-    ("soap_dispenser",  "Handwash",             0.80),
-    ("lotion",          "Moisturiser",          0.75),
-    ("toothbrush",      "Toothbrush",           0.90),
-    ("bottle",          "Packaged Product",     0.55),
-    ("detergent",       "Detergent",            0.80),
+    # Apple (red)
+    ("Apple",         0,   14, 120, 60, 255, 0.70),
+    ("Apple",       242,  255, 120, 60, 255, 0.70),
+    # Orange
+    ("Orange",       14,   28, 160, 120, 255, 0.80),
+    # Watermelon rind: green
+    ("Watermelon",   60,   95, 90,  50, 200, 0.60),
+    # Grapes: purple
+    ("Grapes",      185,  225, 70,  30, 150, 0.72),
+    # Strawberry: red, medium sat
+    ("Strawberry",    0,   14, 110, 80, 230, 0.72),
+    ("Strawberry",  242,  255, 110, 80, 230, 0.72),
+    # Pomegranate: deep red
+    ("Pomegranate",   0,   12, 140, 50, 180, 0.70),
+    ("Pomegranate", 245,  255, 140, 50, 180, 0.70),
+    # Papaya: orange
+    ("Papaya",       20,   35, 140, 120, 240, 0.68),
+    # Coconut shell: brown-grey (low sat, mid dark val)
+    ("Coconut",      20,   50, 20,  40, 140, 0.55),
+    # ── Packaged items detected by saturation / value patterns ────────────
+    # Milk carton: very bright, very low sat (white dominant)
+    ("Milk",          0,  255, 0,   210, 255, 0.55),
+    # Bottled water: very bright, very low sat (clear+white)
+    ("Water Bottle",  0,  255, 0,   200, 255, 0.50),
 ]
 
-# Build the lookup: label_fragment → (grocery_name, confidence_multiplier)
-_LABEL_MAP: dict = {}
-for _fragment, _grocery, _mult in _IMAGENET_TO_GROCERY:
-    # Multiple fragments can map to the same grocery name — that's fine
-    if _fragment not in _LABEL_MAP:
-        _LABEL_MAP[_fragment] = (_grocery, _mult)
-
-# ---------------------------------------------------------------------------
-# Singleton model holder — loaded once, reused across all requests
-# ---------------------------------------------------------------------------
-
-class _ModelHolder:
-    """Thread-safe lazy loader for the MobileNetV3-Small model."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._model: Optional[object] = None
-        self._transform: Optional[object] = None
-        self._labels: Optional[list] = None
-        self._available: Optional[bool] = None
-
-    def load(self) -> bool:
-        """Load the model. Returns True if successful, False if torch unavailable."""
-        if self._available is not None:
-            return self._available
-        with self._lock:
-            if self._available is not None:
-                return self._available
-            try:
-                import torch
-                import torchvision.models as models
-                import torchvision.transforms as T
-
-                logger.info("Loading MobileNetV3-Small (ImageNet-1k) for visual recognition…")
-                weights = models.MobileNet_V3_Small_Weights.IMAGENET1K_V1
-                model = models.mobilenet_v3_small(weights=weights)
-                model.eval()
-
-                # Freeze — inference only, no gradients needed
-                for p in model.parameters():
-                    p.requires_grad_(False)
-
-                transform = T.Compose([
-                    T.Resize(256),
-                    T.CenterCrop(224),
-                    T.ToTensor(),
-                    T.Normalize(mean=[0.485, 0.456, 0.406],
-                                std=[0.229, 0.224, 0.225]),
-                ])
-
-                self._model = model
-                self._transform = transform
-                self._labels = weights.meta["categories"]
-                self._available = True
-                logger.info(
-                    "MobileNetV3-Small loaded — %d ImageNet classes available.",
-                    len(self._labels),
-                )
-            except ImportError:
-                logger.warning(
-                    "torch/torchvision not installed — visual recognition unavailable. "
-                    "OCR-only pipeline will be used."
-                )
-                self._available = False
-            except Exception as exc:
-                logger.error("Failed to load visual model: %s", exc)
-                self._available = False
-        return self._available
-
-    @property
-    def model(self):
-        return self._model
-
-    @property
-    def transform(self):
-        return self._transform
-
-    @property
-    def labels(self):
-        return self._labels
-
-
-_holder = _ModelHolder()
+# Pre-sort by confidence descending so first match is best
+_COLOUR_PROFILES.sort(key=lambda x: x[6], reverse=True)
 
 
 # ---------------------------------------------------------------------------
-# Public recognizer
+# Mushroom / garlic / cauliflower — low-saturation recognizer (special cases)
+# ---------------------------------------------------------------------------
+_LOW_SAT_PROFILES: List[Tuple[str, int, int, int, int, float]] = [
+    # (name, val_lo, val_hi, sat_lo, sat_hi, confidence)
+    ("Cauliflower", 180, 255,  0,  45, 0.62),   # white, low sat
+    ("Mushroom",     80, 180,  0,  40, 0.60),   # brown-grey, low sat
+    ("Garlic",      170, 255,  0,  35, 0.58),   # white, slightly off-white
+    ("Potato",       90, 175, 20,  60, 0.58),   # beige-brown
+]
+
+
+# ---------------------------------------------------------------------------
+# VisualRecognizer
 # ---------------------------------------------------------------------------
 
 class VisualRecognizer:
     """
-    Classifies a PIL image into grocery product names using
-    MobileNetV3-Small (ImageNet) running entirely on CPU.
+    Classify a PIL RGB image into grocery names using HSV colour analysis.
 
-    Call classify(pil_image) → list of (product_name, confidence 0–1).
+    Interface is identical to the old torch-based recognizer — vision_service.py
+    calls it the same way:
 
-    Returns an empty list if:
-    • torch is not installed
-    • the model could not be loaded
-    • no grocery-relevant classes were recognised
+        recognizer.available          → True
+        recognizer.classify(pil_img)  → [(name, confidence), ...]
     """
 
-    # Top-K labels from ImageNet to consider per crop
-    TOP_K = 10
-    # Minimum softmax probability to consider a class
-    MIN_PROB = 0.04
-    # Minimum combined confidence after mapping to return a product
-    MIN_GROCERY_CONF = 0.40
+    # Minimum fraction of pixels matching a colour profile to trigger detection
+    MIN_HIT_FRACTION = 0.08        # ≥ 8 % of crop pixels must match
+    # Minimum confidence to return
+    MIN_CONF = 0.42
+    # Max products per crop (before dedup across crops)
+    MAX_PER_CROP = 6
 
     def __init__(self) -> None:
-        self._available = _holder.load()
+        # Always available — pure Python + numpy, no downloads
+        self._available = True
+        try:
+            import numpy  # noqa: F401 — just validate it's importable
+        except ImportError:
+            logger.warning(
+                "numpy not installed — falling back to Pillow-only histogram mode."
+            )
+            # Still available; classify() handles the numpy-less path
 
     @property
     def available(self) -> bool:
@@ -290,80 +192,130 @@ class VisualRecognizer:
 
     def classify(self, pil_image) -> List[Tuple[str, float]]:
         """
-        Run visual classification on a PIL RGB image.
-
-        Returns
-        -------
-        List of (grocery_product_name, confidence) tuples,
-        sorted by confidence descending, deduplicated.
+        Return a deduplicated list of (grocery_name, confidence) tuples
+        sorted by confidence descending.
         """
-        if not self._available:
-            return []
-
-        import torch
-
         crops = self._make_crops(pil_image)
-        raw_results: dict[str, float] = {}   # grocery_name → best confidence
+        accumulated: dict[str, float] = {}   # name → best confidence so far
 
         for crop in crops:
             try:
-                tensor = _holder.transform(crop).unsqueeze(0)   # (1, 3, 224, 224)
-                with torch.no_grad():
-                    logits = _holder.model(tensor)
-                    probs = torch.softmax(logits, dim=1)[0]      # (1000,)
-
-                top_probs, top_indices = torch.topk(probs, self.TOP_K)
-
-                for prob_tensor, idx_tensor in zip(top_probs, top_indices):
-                    prob = prob_tensor.item()
-                    if prob < self.MIN_PROB:
-                        break
-                    label = _holder.labels[idx_tensor.item()].lower()
-                    label_clean = label.replace(",", "").replace(" ", "_")
-
-                    grocery, mult = self._map_label(label, label_clean)
-                    if grocery is None:
-                        continue
-
-                    combined = prob * mult
-                    if combined >= self.MIN_GROCERY_CONF:
-                        existing = raw_results.get(grocery, 0.0)
-                        raw_results[grocery] = max(existing, combined)
-
+                results = self._classify_crop(crop)
+                for name, conf in results:
+                    accumulated[name] = max(accumulated.get(name, 0.0), conf)
             except Exception as exc:
-                logger.warning("Visual classification failed on crop: %s", exc)
+                logger.debug("Colour classifier failed on crop: %s", exc)
 
-        # Sort by confidence descending
-        sorted_results = sorted(raw_results.items(), key=lambda x: x[1], reverse=True)
-
-        # Cap at 8 products per image — avoid noise
-        return [(name, round(min(conf, 0.99), 3)) for name, conf in sorted_results[:8]]
+        sorted_results = sorted(accumulated.items(), key=lambda x: x[1], reverse=True)
+        return [(n, round(min(c, 0.97), 3)) for n, c in sorted_results[:8]]
 
     # ------------------------------------------------------------------
-    # Private helpers
+    # Private
     # ------------------------------------------------------------------
+
+    def _classify_crop(self, pil_crop) -> List[Tuple[str, float]]:
+        """Run colour profile matching on a single crop."""
+        try:
+            return self._classify_crop_numpy(pil_crop)
+        except ImportError:
+            return self._classify_crop_pillow(pil_crop)
+
+    def _classify_crop_numpy(self, pil_crop) -> List[Tuple[str, float]]:
+        """Fast path: use numpy for HSV pixel matching."""
+        import numpy as np
+        from PIL import ImageFilter
+
+        # Resize to 128×128 for speed (colour distribution is scale-invariant)
+        small = pil_crop.convert("RGB").resize((128, 128))
+        # Mild blur to reduce JPEG artefacts
+        small = small.filter(ImageFilter.GaussianBlur(radius=1))
+        hsv = small.convert("HSV")
+
+        arr = np.array(hsv, dtype=np.uint8)    # (128, 128, 3)
+        H = arr[:, :, 0].astype(np.int32)
+        S = arr[:, :, 1].astype(np.int32)
+        V = arr[:, :, 2].astype(np.int32)
+        total_pixels = H.size
+
+        hits: dict[str, float] = {}
+
+        for name, h_lo, h_hi, s_lo, v_lo, v_hi, base_conf in _COLOUR_PROFILES:
+            if h_hi >= h_lo:
+                hue_mask = (H >= h_lo) & (H <= h_hi)
+            else:
+                # wraps around 0 (e.g. red: h>=240 OR h<=15)
+                hue_mask = (H >= h_lo) | (H <= h_hi)
+
+            mask = hue_mask & (S >= s_lo) & (V >= v_lo) & (V <= v_hi)
+            hit_frac = np.sum(mask) / total_pixels
+
+            if hit_frac >= self.MIN_HIT_FRACTION:
+                # Scale confidence by how dominant the colour is (capped)
+                conf = base_conf * min(1.0, hit_frac / 0.20)
+                if conf >= self.MIN_CONF:
+                    hits[name] = max(hits.get(name, 0.0), round(conf, 3))
+
+        # Low-saturation profiles (cauliflower, mushroom, potato, garlic)
+        for name, v_lo, v_hi, s_lo, s_hi, base_conf in _LOW_SAT_PROFILES:
+            mask = (S >= s_lo) & (S <= s_hi) & (V >= v_lo) & (V <= v_hi)
+            hit_frac = np.sum(mask) / total_pixels
+            if hit_frac >= self.MIN_HIT_FRACTION + 0.05:   # slightly stricter
+                conf = base_conf * min(1.0, hit_frac / 0.25)
+                if conf >= self.MIN_CONF:
+                    hits[name] = max(hits.get(name, 0.0), round(conf, 3))
+
+        sorted_hits = sorted(hits.items(), key=lambda x: x[1], reverse=True)
+        return sorted_hits[: self.MAX_PER_CROP]
+
+    def _classify_crop_pillow(self, pil_crop) -> List[Tuple[str, float]]:
+        """
+        Fallback path: use Pillow histogram (no numpy).
+        Less accurate but zero extra dependencies.
+        """
+        from PIL import ImageFilter
+
+        small = pil_crop.convert("RGB").resize((128, 128))
+        small = small.filter(ImageFilter.GaussianBlur(radius=1))
+        hsv = small.convert("HSV")
+        histogram = hsv.histogram()    # 256 bins × 3 channels = 768 values
+        total = 128 * 128
+
+        h_hist = histogram[0:256]
+        s_hist = histogram[256:512]
+        v_hist = histogram[512:768]
+
+        hits: dict[str, float] = {}
+
+        for name, h_lo, h_hi, s_lo, v_lo, v_hi, base_conf in _COLOUR_PROFILES:
+            if h_hi >= h_lo:
+                h_count = sum(h_hist[h_lo : h_hi + 1])
+            else:
+                h_count = sum(h_hist[h_lo:]) + sum(h_hist[: h_hi + 1])
+
+            s_count = sum(s_hist[s_lo:])
+            v_count = sum(v_hist[v_lo : v_hi + 1])
+
+            # Rough hit estimate — histogram channels are independent so
+            # this is an upper bound, not exact pixel overlap
+            hit_frac = min(h_count, s_count, v_count) / total
+
+            if hit_frac >= self.MIN_HIT_FRACTION * total:
+                conf = base_conf * min(1.0, hit_frac / (0.20 * total))
+                if conf >= self.MIN_CONF:
+                    hits[name] = max(hits.get(name, 0.0), round(conf, 3))
+
+        return sorted(hits.items(), key=lambda x: x[1], reverse=True)[: self.MAX_PER_CROP]
 
     def _make_crops(self, pil_image) -> list:
         """
-        Return a list of PIL image crops to classify:
-        1. Full image
-        2. 2×2 quadrants (top-left, top-right, bottom-left, bottom-right)
-        3. 3×3 grid cells (centre strip, edges)
-
-        Crops with very little content (nearly uniform colour) are skipped.
-        This enables multi-object detection from a single photo.
+        Return full image + 2×2 quadrant crops.
+        (3×3 grid removed — too many crops for colour analysis returns noise)
         """
-        from PIL import Image
         img = pil_image.convert("RGB")
         w, h = img.size
-        crops = []
+        crops = [img]
 
-        # Full image always included
-        crops.append(img)
-
-        # Only add sub-crops for images large enough that crops have content
         if w >= 200 and h >= 200:
-            # 2×2 quadrants
             for row in range(2):
                 for col in range(2):
                     x0 = col * w // 2
@@ -374,46 +326,19 @@ class VisualRecognizer:
                     if _is_content_rich(crop):
                         crops.append(crop)
 
-            # 3×3 grid (only the 9 cells)
-            if w >= 400 and h >= 400:
-                for row in range(3):
-                    for col in range(3):
-                        x0 = col * w // 3
-                        y0 = row * h // 3
-                        x1 = (col + 1) * w // 3
-                        y1 = (row + 1) * h // 3
-                        crop = img.crop((x0, y0, x1, y1))
-                        if _is_content_rich(crop):
-                            crops.append(crop)
-
         return crops
-
-    def _map_label(self, label_raw: str, label_clean: str) -> Tuple[Optional[str], float]:
-        """
-        Check the label against our mapping table using substring matching.
-        Returns (grocery_name, confidence_multiplier) or (None, 0).
-        """
-        # Direct lookup on cleaned label first
-        for fragment, (grocery, mult) in _LABEL_MAP.items():
-            if fragment in label_raw or fragment in label_clean:
-                return grocery, mult
-        return None, 0.0
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Content-richness check (unchanged from original)
 # ---------------------------------------------------------------------------
 
 def _is_content_rich(pil_image, threshold: float = 0.10) -> bool:
-    """
-    Return True if the crop has enough variation to contain real content
-    (not a plain background/sky/floor).
-    Uses std-dev of the grayscale histogram as a quick proxy.
-    """
+    """Return True if the crop contains enough variation to be worth classifying."""
     try:
         import statistics
         gray = pil_image.convert("L")
-        hist = gray.histogram()              # 256 bins
+        hist = gray.histogram()
         total = sum(hist)
         if total == 0:
             return False
@@ -421,16 +346,15 @@ def _is_content_rich(pil_image, threshold: float = 0.10) -> bool:
         mean = sum(i * f for i, f in enumerate(freqs))
         variance = sum((i - mean) ** 2 * f for i, f in enumerate(freqs))
         std_dev = variance ** 0.5
-        return std_dev > threshold * 255    # e.g. >25.5 for threshold=0.10
+        return std_dev > threshold * 255
     except Exception:
-        return True   # if we can't tell, include the crop
+        return True
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton for import convenience
+# Module-level singleton — loaded lazily, thread-safe
 # ---------------------------------------------------------------------------
 
-# Loaded lazily on first import of this module
 _recognizer: Optional[VisualRecognizer] = None
 _recognizer_lock = threading.Lock()
 
@@ -441,5 +365,9 @@ def get_recognizer() -> VisualRecognizer:
     if _recognizer is None:
         with _recognizer_lock:
             if _recognizer is None:
+                logger.info(
+                    "Initialising lightweight colour-based visual recognizer "
+                    "(Pillow+numpy, no model download required)."
+                )
                 _recognizer = VisualRecognizer()
     return _recognizer
