@@ -6,8 +6,10 @@
 #   `frontend` (nginx:alpine, static files).  nginx proxies /api → api:8000.
 #
 # PRODUCTION SINGLE-CONTAINER (Fly.io / Render / Railway):
-#   Set BUILD_TARGET=prod to get a single image that runs BOTH nginx (port 80)
-#   and uvicorn (internal only) via supervisord.
+#   Set BUILD_TARGET=prod to get a single image that runs BOTH nginx and
+#   uvicorn via supervisord.  The entrypoint (docker/start.sh) substitutes
+#   the $PORT env var (injected by Render, default 10000) into the nginx
+#   config at startup so Render's router can reach nginx.
 #
 #   docker build --build-arg BUILD_TARGET=prod -t groceryai .
 #
@@ -41,10 +43,11 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", 
 # ── Stage 3: Production single-container (nginx + uvicorn + supervisord) ──────
 FROM python:3.11-slim AS prod
 
-# Install nginx, supervisord and tesseract for free OCR image recognition
+# Install nginx, supervisord, gettext (envsubst) and tesseract for OCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
         nginx \
         supervisor \
+        gettext-base \
         tesseract-ocr \
         tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
@@ -60,17 +63,23 @@ COPY backend/ ./
 # Frontend static files
 COPY frontend/ /usr/share/nginx/html/
 
-# nginx config (prod variant: API is on 127.0.0.1, not docker-compose hostname)
-COPY nginx-prod.conf /etc/nginx/conf.d/default.conf
+# Store nginx config as a template; start.sh will run envsubst at runtime
+# to substitute $PORT (injected by Render/PaaS) before nginx starts.
+COPY nginx-prod.conf /etc/nginx/conf.d/default.conf.template
 RUN rm -f /etc/nginx/sites-enabled/default
 
 # supervisord config — starts nginx and uvicorn together
 RUN mkdir -p /var/log/supervisor
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-EXPOSE 80
+# Startup script: substitutes $PORT in nginx config then exec supervisord
+COPY docker/start.sh /start.sh
+RUN chmod +x /start.sh
 
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+# Render default PORT is 10000; expose it so `docker run -P` works locally too
+EXPOSE 10000
+
+CMD ["/start.sh"]
 
 # ── Final: select the right stage based on BUILD_TARGET ──────────────────────
 FROM ${BUILD_TARGET}

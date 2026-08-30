@@ -24,8 +24,12 @@ services:
       BUILD_TARGET: prod
     plan: free
     region: singapore
+    # Render routes public traffic to $PORT (default 10000).
+    # Our start.sh substitutes $PORT into nginx-prod.conf at runtime.
     healthCheckPath: /api/health
     envVars:
+      - key: PORT
+        value: "10000"       # Render's default; must match what nginx listens on
       - key: OPENAI_API_KEY
         sync: false          # you set this manually in the Render dashboard
       - key: REDIS_URL
