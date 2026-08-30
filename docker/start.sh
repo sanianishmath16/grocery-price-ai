@@ -1,23 +1,28 @@
 #!/bin/sh
 # docker/start.sh — container entrypoint for the production single-container image.
 #
-# Render (and other PaaS platforms) inject a PORT environment variable.
-# nginx must listen on that port; we use envsubst to substitute $PORT into
-# the nginx config before starting supervisord.
-#
-# Default PORT=10000 matches Render's default when no explicit port is set.
+# Render injects PORT (default 10000). nginx must listen on that port.
+# We use envsubst to substitute ${PORT} into the nginx config template
+# before starting supervisord, which runs nginx + uvicorn together.
 
 set -e
 
 PORT="${PORT:-10000}"
 export PORT
 
-echo "[start.sh] Substituting PORT=${PORT} into nginx config..."
+echo "[start.sh] PORT=${PORT}"
+echo "[start.sh] Substituting \${PORT} into nginx config template..."
 
-# Write the rendered nginx config (envsubst replaces ${PORT} only)
-envsubst '${PORT}' < /etc/nginx/conf.d/default.conf.template \
+# Substitute only ${PORT}; leave all other nginx $variables untouched
+envsubst '${PORT}' \
+    < /etc/nginx/conf.d/default.conf.template \
     > /etc/nginx/conf.d/default.conf
 
-echo "[start.sh] nginx config written. Starting supervisord..."
+echo "[start.sh] Rendered nginx config:"
+cat /etc/nginx/conf.d/default.conf
 
+echo "[start.sh] Testing nginx config..."
+nginx -t
+
+echo "[start.sh] Starting supervisord (nginx + uvicorn)..."
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
