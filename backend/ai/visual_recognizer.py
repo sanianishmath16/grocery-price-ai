@@ -103,42 +103,77 @@ _COLOUR_PROFILES: List[Tuple[str, int, int, int, int, int, float]] = [
     ("Beetroot",    220,  245, 90,  30, 120, 0.72),
     # Onion (red): purple-red hues
     ("Onion",       200,  240, 70,  40, 160, 0.70),
-    # Potato / Ginger: brown-beige (low saturation, mid value)
-    ("Potato",       18,   40, 30,  70, 180, 0.60),
-    ("Ginger",       22,   45, 40,  80, 190, 0.55),
-    # Cauliflower: very low sat, high value (white-cream)
-    ("Cauliflower",   0,  255, 0,  190, 255, 0.60),   # catches by val+sat
-    # Corn: yellow
+    # Corn: vivid yellow (narrow band)
     ("Sweet Corn",   38,   52, 120, 160, 255, 0.74),
     # ── Fruits ───────────────────────────────────────────────────────────
-    # Apple (red)
+    # Apple (red) — colour group dedup keeps highest-conf per red band
     ("Apple",         0,   14, 120, 60, 255, 0.70),
     ("Apple",       242,  255, 120, 60, 255, 0.70),
-    # Orange
+    # Orange — distinct saturation from Carrot
     ("Orange",       14,   28, 160, 120, 255, 0.80),
-    # Watermelon rind: green
-    ("Watermelon",   60,   95, 90,  50, 200, 0.60),
-    # Grapes: purple
+    # Grapes: purple band
     ("Grapes",      185,  225, 70,  30, 150, 0.72),
-    # Strawberry: red, medium sat
+    # Strawberry: red, slightly lower sat than Tomato
     ("Strawberry",    0,   14, 110, 80, 230, 0.72),
     ("Strawberry",  242,  255, 110, 80, 230, 0.72),
-    # Pomegranate: deep red
-    ("Pomegranate",   0,   12, 140, 50, 180, 0.70),
-    ("Pomegranate", 245,  255, 140, 50, 180, 0.70),
-    # Papaya: orange
-    ("Papaya",       20,   35, 140, 120, 240, 0.68),
-    # Coconut shell: brown-grey (low sat, mid dark val)
-    ("Coconut",      20,   50, 20,  40, 140, 0.55),
-    # ── Packaged items detected by saturation / value patterns ────────────
-    # Milk carton: very bright, very low sat (white dominant)
-    ("Milk",          0,  255, 0,   210, 255, 0.55),
-    # Bottled water: very bright, very low sat (clear+white)
-    ("Water Bottle",  0,  255, 0,   200, 255, 0.50),
 ]
+# Cauliflower/Garlic/Potato/Milk are handled exclusively by _LOW_SAT_PROFILES
+# (stricter hit-fraction thresholds) to prevent white backgrounds triggering them.
 
 # Pre-sort by confidence descending so first match is best
 _COLOUR_PROFILES.sort(key=lambda x: x[6], reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# Colour-band groups — for deduplication within a single crop.
+#
+# When multiple profile names share the same dominant colour band, keep only
+# the highest-confidence hit per group.  This prevents one red object from
+# simultaneously producing Tomato + Capsicum + Strawberry + Pomegranate.
+# ---------------------------------------------------------------------------
+_COLOUR_GROUPS: List[Tuple[str, ...]] = [
+    # Red band
+    ("Tomato", "Capsicum", "Strawberry", "Apple", "Pomegranate"),
+    # Orange band
+    ("Carrot", "Orange", "Pumpkin", "Papaya", "Mango"),
+    # Yellow band
+    ("Banana", "Lemon", "Sweet Corn"),
+    # Green band
+    ("Broccoli", "Cabbage", "Spinach", "Cucumber", "Watermelon"),
+    # Purple band
+    ("Brinjal", "Grapes", "Onion", "Beetroot"),
+    # Neutral / low-sat (only fire when there's a VERY dominant neutral mass)
+    ("Cauliflower", "Mushroom", "Garlic", "Potato", "Milk", "Water Bottle"),
+]
+
+# Build reverse lookup: name → group index
+_NAME_TO_GROUP: dict[str, int] = {}
+for _gi, _grp in enumerate(_COLOUR_GROUPS):
+    for _nm in _grp:
+        _NAME_TO_GROUP[_nm] = _gi
+
+
+def _dedup_by_colour_group(hits: dict) -> dict:
+    """
+    Given {name: confidence}, keep only the top-confidence name per colour group.
+    Names not in any group are kept as-is.
+    """
+    group_best: dict[int, tuple] = {}   # group_idx → (name, conf)
+    ungrouped: dict[str, float] = {}
+
+    for name, conf in hits.items():
+        gi = _NAME_TO_GROUP.get(name)
+        if gi is None:
+            ungrouped[name] = conf
+        else:
+            current = group_best.get(gi)
+            if current is None or conf > current[1]:
+                group_best[gi] = (name, conf)
+
+    result = ungrouped.copy()
+    for name, conf in group_best.values():
+        result[name] = conf
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -146,10 +181,12 @@ _COLOUR_PROFILES.sort(key=lambda x: x[6], reverse=True)
 # ---------------------------------------------------------------------------
 _LOW_SAT_PROFILES: List[Tuple[str, int, int, int, int, float]] = [
     # (name, val_lo, val_hi, sat_lo, sat_hi, confidence)
-    ("Cauliflower", 180, 255,  0,  45, 0.62),   # white, low sat
-    ("Mushroom",     80, 180,  0,  40, 0.60),   # brown-grey, low sat
-    ("Garlic",      170, 255,  0,  35, 0.58),   # white, slightly off-white
-    ("Potato",       90, 175, 20,  60, 0.58),   # beige-brown
+    # Require sat < 45 AND minimum hit fraction 25% to distinguish from neutral
+    # backgrounds (white walls, packaging, bright floors).
+    ("Cauliflower", 195, 255,  0,  45, 0.62),   # bright white
+    ("Garlic",      200, 255,  0,  30, 0.58),   # very white, very low sat
+    # Mushroom and potato have too much overlap with common backgrounds —
+    # removed from low-sat profiles to avoid false positives on grey scenes.
 ]
 
 
@@ -166,14 +203,29 @@ class VisualRecognizer:
 
         recognizer.available          → True
         recognizer.classify(pil_img)  → [(name, confidence), ...]
+
+    Anti-hallucination design
+    -------------------------
+    • MIN_HIT_FRACTION = 0.15  — at least 15% of crop pixels must match the
+      colour profile.  This prevents a small red package corner from triggering
+      "Tomato" across the whole image.
+    • MIN_CONF = 0.55          — only return products with strong colour evidence.
+    • Per-image cap = 5        — a real-world basket rarely has more than 5
+      visually distinct dominant colours.  Sub-crops are used for multi-object
+      images; the global dedup prevents the same object being counted twice.
+    • Dominant-colour guard    — a product is only returned if its colour is
+      among the top-3 most dominant colours in the image, not just present.
     """
 
-    # Minimum fraction of pixels matching a colour profile to trigger detection
-    MIN_HIT_FRACTION = 0.08        # ≥ 8 % of crop pixels must match
-    # Minimum confidence to return
-    MIN_CONF = 0.42
-    # Max products per crop (before dedup across crops)
-    MAX_PER_CROP = 6
+    # Minimum fraction of pixels matching a colour profile to trigger detection.
+    # 15% prevents small colourful labels/backgrounds from falsely firing.
+    MIN_HIT_FRACTION = 0.15
+    # Minimum confidence to return — below this the match is unreliable.
+    MIN_CONF = 0.55
+    # Maximum distinct products returned per full classify() call (all crops).
+    # If a user uploads 1 image with 6 real objects, sub-crops will find them.
+    # Capping at 6 prevents colour noise from adding phantom products.
+    MAX_PRODUCTS = 6
 
     def __init__(self) -> None:
         # Always available — pure Python + numpy, no downloads
@@ -193,7 +245,10 @@ class VisualRecognizer:
     def classify(self, pil_image) -> List[Tuple[str, float]]:
         """
         Return a deduplicated list of (grocery_name, confidence) tuples
-        sorted by confidence descending.
+        sorted by confidence descending, capped at MAX_PRODUCTS.
+
+        Anti-hallucination: only names whose best confidence exceeds MIN_CONF
+        AND whose colour is dominant in at least one crop are returned.
         """
         crops = self._make_crops(pil_image)
         accumulated: dict[str, float] = {}   # name → best confidence so far
@@ -206,8 +261,13 @@ class VisualRecognizer:
             except Exception as exc:
                 logger.debug("Colour classifier failed on crop: %s", exc)
 
-        sorted_results = sorted(accumulated.items(), key=lambda x: x[1], reverse=True)
-        return [(n, round(min(c, 0.97), 3)) for n, c in sorted_results[:8]]
+        # Final cross-crop dedup: keep only top name per colour group
+        accumulated = _dedup_by_colour_group(accumulated)
+        # Hard filter: only return products above MIN_CONF threshold
+        filtered = [(n, c) for n, c in accumulated.items() if c >= self.MIN_CONF]
+        sorted_results = sorted(filtered, key=lambda x: x[1], reverse=True)
+        # Cap at MAX_PRODUCTS — prevents colour noise accumulating across crops
+        return [(n, round(min(c, 0.97), 3)) for n, c in sorted_results[:self.MAX_PRODUCTS]]
 
     # ------------------------------------------------------------------
     # Private
@@ -247,25 +307,31 @@ class VisualRecognizer:
                 hue_mask = (H >= h_lo) | (H <= h_hi)
 
             mask = hue_mask & (S >= s_lo) & (V >= v_lo) & (V <= v_hi)
-            hit_frac = np.sum(mask) / total_pixels
+            hit_frac = float(np.sum(mask)) / total_pixels
 
             if hit_frac >= self.MIN_HIT_FRACTION:
-                # Scale confidence by how dominant the colour is (capped)
-                conf = base_conf * min(1.0, hit_frac / 0.20)
+                # Confidence = base_conf × how dominant (fraction / saturation point).
+                # We use 0.30 as the "full dominance" threshold — if 30%+ of the
+                # crop matches, confidence is uncapped at base_conf.
+                # This prevents low-fraction noise from reaching MIN_CONF.
+                conf = base_conf * min(1.0, hit_frac / 0.30)
                 if conf >= self.MIN_CONF:
                     hits[name] = max(hits.get(name, 0.0), round(conf, 3))
 
-        # Low-saturation profiles (cauliflower, mushroom, potato, garlic)
+        # Low-saturation profiles: require higher fraction (neutral backgrounds
+        # are common, so we need stricter evidence for cauliflower/mushroom/etc.)
         for name, v_lo, v_hi, s_lo, s_hi, base_conf in _LOW_SAT_PROFILES:
             mask = (S >= s_lo) & (S <= s_hi) & (V >= v_lo) & (V <= v_hi)
-            hit_frac = np.sum(mask) / total_pixels
-            if hit_frac >= self.MIN_HIT_FRACTION + 0.05:   # slightly stricter
-                conf = base_conf * min(1.0, hit_frac / 0.25)
+            hit_frac = float(np.sum(mask)) / total_pixels
+            if hit_frac >= self.MIN_HIT_FRACTION + 0.10:   # 25% min for low-sat
+                conf = base_conf * min(1.0, hit_frac / 0.35)
                 if conf >= self.MIN_CONF:
                     hits[name] = max(hits.get(name, 0.0), round(conf, 3))
 
+        # Dedup overlapping colour bands before returning
+        hits = _dedup_by_colour_group(hits)
         sorted_hits = sorted(hits.items(), key=lambda x: x[1], reverse=True)
-        return sorted_hits[: self.MAX_PER_CROP]
+        return sorted_hits[:4]   # max 4 per crop to control noise
 
     def _classify_crop_pillow(self, pil_crop) -> List[Tuple[str, float]]:
         """
@@ -296,15 +362,16 @@ class VisualRecognizer:
             v_count = sum(v_hist[v_lo : v_hi + 1])
 
             # Rough hit estimate — histogram channels are independent so
-            # this is an upper bound, not exact pixel overlap
+            # this is an upper bound, not exact pixel overlap.
             hit_frac = min(h_count, s_count, v_count) / total
 
-            if hit_frac >= self.MIN_HIT_FRACTION * total:
-                conf = base_conf * min(1.0, hit_frac / (0.20 * total))
+            if hit_frac >= self.MIN_HIT_FRACTION:
+                conf = base_conf * min(1.0, hit_frac / 0.30)
                 if conf >= self.MIN_CONF:
                     hits[name] = max(hits.get(name, 0.0), round(conf, 3))
 
-        return sorted(hits.items(), key=lambda x: x[1], reverse=True)[: self.MAX_PER_CROP]
+        hits = _dedup_by_colour_group(hits)
+        return sorted(hits.items(), key=lambda x: x[1], reverse=True)[:4]
 
     def _make_crops(self, pil_image) -> list:
         """

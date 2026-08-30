@@ -513,12 +513,12 @@ async function analyseImages() {
   imgResultsSec.classList.add("hidden");
 
   setImageLoading(true);
-  updateLoadingStep("Analysing imagesΓÇª", `Processing ${uploadedImages.length} image(s)`);
+  updateLoadingStep("Analysing images...", `Processing ${uploadedImages.length} image(s)`);
 
   try {
     const images_b64 = uploadedImages.map(img => img.b64);
 
-    updateLoadingStep("Detecting productsΓÇª", "Identifying grocery items in your photos");
+    updateLoadingStep("Detecting products...", "Identifying grocery items in your photos");
 
     const resp = await fetch(`${API_BASE}/api/analyze-images`, {
       method: "POST",
@@ -667,7 +667,7 @@ async function compareDetected() {
   const btn = document.getElementById("compare-detected-btn");
   btn.disabled = true;
   const origText = btn.innerHTML;
-  btn.innerHTML = `<span class="btn-spinner" style="border:2px solid rgba(255,255,255,.35);border-top-color:#fff;width:15px;height:15px;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;margin-right:6px"></span> ComparingΓÇª`;
+  btn.innerHTML = `<span class="btn-spinner" style="border:2px solid rgba(255,255,255,.35);border-top-color:#fff;width:15px;height:15px;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;margin-right:6px"></span> Comparing...`;
 
   try {
     const resp = await fetch(`${API_BASE}/api/compare`, {

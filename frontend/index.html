@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>GroceryAI ΓÇö Compare Grocery Prices Instantly</title>
+  <title>GroceryAI - Compare Grocery Prices Instantly</title>
 
   <meta name="description" content="Compare grocery prices across Blinkit, Zepto, Instamart and Flipkart Minutes instantly. Search by text or upload a photo." />
   <meta name="theme-color" content="#16a34a" />
 
   <!-- Open Graph -->
-  <meta property="og:title" content="GroceryAI ΓÇö Compare Grocery Prices" />
+  <meta property="og:title" content="GroceryAI - Compare Grocery Prices" />
   <meta property="og:description" content="Find the cheapest grocery app in seconds. Compare Blinkit, Zepto, Instamart and more." />
   <meta property="og:type" content="website" />
 
@@ -167,7 +167,7 @@
             </span>
             <span class="btn-loading hidden" aria-hidden="true">
               <span class="btn-spinner"></span>
-              ComparingΓÇª
+              Comparing...
             </span>
           </button>
           <p id="error-msg" class="alert-error hidden" role="alert"></p>
@@ -185,7 +185,7 @@
               <path d="M16 10a4 4 0 01-8 0" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
           </div>
-          <p class="loading-title">Finding the best priceΓÇª</p>
+          <p class="loading-title">Finding the best price...</p>
           <p class="loading-sub">Checking prices across all grocery apps</p>
           <div class="loading-apps">
             <span class="loading-app">ΓÜí Blinkit</span>
@@ -317,7 +317,7 @@
             </span>
             <span class="btn-loading hidden" aria-hidden="true">
               <span class="btn-spinner"></span>
-              <span id="analyse-loading-text">AnalysingΓÇª</span>
+              <span id="analyse-loading-text">Analysing...</span>
             </span>
           </button>
           <p id="img-error-msg" class="alert-error hidden" role="alert"></p>
@@ -326,6 +326,7 @@
 
       <!-- Image analysis loading -->
       <section id="img-loading-section" class="hidden" aria-live="polite" aria-label="Analysing images">
+
         <div class="loading-card card">
           <div class="loading-visual">
             <div class="loading-ring purple-ring"></div>
@@ -334,7 +335,7 @@
               <path d="M3 16l5-5 4 4 3-3 6 6" stroke="#7c3aed" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
-          <p class="loading-title" id="img-loading-title">Analysing your photoΓÇª</p>
+          <p class="loading-title" id="img-loading-title">Analysing your photo...</p>
           <p class="loading-sub" id="img-loading-sub">Our AI is reading the product label</p>
           <div class="loading-apps">
             <span class="loading-app">≡ƒöì Reading label</span>
@@ -348,7 +349,7 @@
       <section id="detected-section" class="hidden" aria-label="Detected products">
         <div class="section-header">
           <h2 class="results-heading">Products Found</h2>
-          <p class="section-sub">Review detected items ΓÇö edit or remove any before comparing</p>
+          <p class="section-sub">Review detected items - edit or remove any before comparing</p>
         </div>
         <div id="detected-list" class="detected-list" aria-live="polite"></div>
         <div class="detected-actions">
@@ -359,7 +360,7 @@
             Compare Prices
           </button>
           <button class="outline-btn" onclick="resetImageSearch()" type="button">
-            ΓåÉ Upload different photo
+            Upload different photo
           </button>
         </div>
       </section>

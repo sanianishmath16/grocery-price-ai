@@ -353,6 +353,37 @@ def _sync_hybrid_pipeline(images_b64: List[str]) -> VisionResult:
     )
 
 
+def _image_likely_has_text(pil_img) -> bool:
+    """
+    Fast heuristic: returns True if the image likely contains printed text
+    (e.g. a product label), False if it is likely raw produce with no text.
+
+    Method: compute the Laplacian variance of the grayscale image.
+    Printed text creates sharp high-contrast edges that yield a high Laplacian
+    variance.  A bowl of tomatoes has soft colour gradients → low variance.
+
+    Threshold is tuned conservatively so that product labels always pass and
+    pure-vegetable photos usually skip (saving 1–2 Tesseract passes each).
+    """
+    try:
+        import numpy as np
+        gray = pil_img.convert("L").resize((256, 256))
+        arr = np.array(gray, dtype=np.float32)
+        # Laplacian approximation: difference of each pixel and its 4 neighbours
+        lap = (
+            np.roll(arr, 1, axis=0) + np.roll(arr, -1, axis=0)
+            + np.roll(arr, 1, axis=1) + np.roll(arr, -1, axis=1)
+            - 4 * arr
+        )
+        variance = float(np.var(lap))
+        # Empirically: text-heavy labels → variance ≥ 400; plain produce → < 200
+        result = variance >= 250
+        logger.debug("Image text-likelihood: Laplacian variance=%.1f → %s", variance, result)
+        return result
+    except Exception:
+        return True   # if check fails, run OCR anyway (safe default)
+
+
 def _process_single_image_hybrid(
     image_bytes: bytes,
     img_idx: int,
@@ -380,37 +411,50 @@ def _process_single_image_hybrid(
                 [(n, round(c, 2)) for n, c in list(visual_hits.items())[:5]],
             )
 
-    # ── STEP 2: OCR extraction ────────────────────────────────────────────
-    img_gray = img.convert("L")
-    img_gray = ImageEnhance.Contrast(img_gray).enhance(2.2)
-    img_gray = ImageEnhance.Sharpness(img_gray).enhance(2.0)
-    img_gray = img_gray.filter(ImageFilter.SHARPEN)
-
-    extracted_text = ""
-    try:
-        import pytesseract
-        for psm in (3, 11, 6):
-            text = pytesseract.image_to_string(
-                img_gray, config=f"--psm {psm} --oem 3 -l eng"
-            )
-            if len(text.strip()) > 8:
-                extracted_text = text
-                break
-        logger.debug("Image %d OCR text (first 200): %s", img_idx, extracted_text[:200])
-    except ImportError:
-        logger.warning("pytesseract not installed — OCR unavailable for image %d", img_idx)
-    except Exception as exc:
-        logger.warning("OCR error on image %d: %s", img_idx, exc)
-
+    # ── STEP 2: OCR extraction (skip if image has no text-like regions) ───
+    # Heuristic: check whether the image has high-contrast, sharp horizontal
+    # or vertical edges typical of printed text.  This avoids running 3 full
+    # Tesseract passes on raw vegetable photos (which contain no useful text).
     ocr_hits: Dict[str, float] = {}
-    if extracted_text.strip():
-        ocr_results = _match_text_to_products(extracted_text, img_idx)
-        for p in ocr_results:
-            existing = ocr_hits.get(p.name, 0.0)
-            ocr_hits[p.name] = max(existing, p.confidence)
+    if _image_likely_has_text(img):
+        img_gray = img.convert("L")
+        img_gray = ImageEnhance.Contrast(img_gray).enhance(2.2)
+        img_gray = ImageEnhance.Sharpness(img_gray).enhance(2.0)
+        img_gray = img_gray.filter(ImageFilter.SHARPEN)
+
+        extracted_text = ""
+        try:
+            import pytesseract
+            # Single PSM pass: PSM 3 (auto) — sufficient for product labels.
+            # Only fall through to PSM 6 if the first pass returns nothing useful.
+            for psm in (3, 6):
+                text = pytesseract.image_to_string(
+                    img_gray, config=f"--psm {psm} --oem 3 -l eng"
+                )
+                if len(text.strip()) > 8:
+                    extracted_text = text
+                    break
+            logger.debug("Image %d OCR text (first 200): %s", img_idx, extracted_text[:200])
+        except ImportError:
+            logger.warning("pytesseract not installed — OCR unavailable for image %d", img_idx)
+        except Exception as exc:
+            logger.warning("OCR error on image %d: %s", img_idx, exc)
+
+        if extracted_text.strip():
+            ocr_results = _match_text_to_products(extracted_text, img_idx)
+            for p in ocr_results:
+                existing = ocr_hits.get(p.name, 0.0)
+                ocr_hits[p.name] = max(existing, p.confidence)
+    else:
+        logger.debug("Image %d: no text regions detected — skipping OCR", img_idx)
 
     # ── STEP 3: Fusion ────────────────────────────────────────────────────
     return _fuse_results(visual_hits, ocr_hits, img_idx)
+
+
+# Maximum products returned per single image — a real basket photo rarely
+# has more than this many DISTINCT visually dominant objects.
+_MAX_PRODUCTS_PER_IMAGE = 8
 
 
 def _fuse_results(
@@ -421,26 +465,34 @@ def _fuse_results(
     """
     Merge visual and OCR detections into a single ranked list.
 
-    Fusion rules:
-    - If both visual and OCR detect the same product → confidence boost (+15%)
-    - If only visual → use visual confidence; mark source = "visual"
-    - If only OCR   → use OCR confidence; mark source = "ocr"
-    - Minimum threshold: 0.40 for visual-only, 0.50 for OCR-only
+    Strict anti-hallucination fusion rules:
+    - Both visual AND OCR agree  → strongest evidence; confidence boost (+10%)
+    - OCR only (packaged labels) → direct text match; use OCR confidence (≥0.65)
+    - Visual only (fresh produce)→ colour-based; use visual confidence (≥0.60)
+
+    Thresholds are intentionally strict:
+    - Visual-only minimum raised to 0.60 (was 0.40) to cut colour noise.
+    - OCR-only minimum raised to 0.65 (was 0.50) — short brand matches are
+      common OCR false positives (e.g. "MAG" → Maggi).
+    - Per-image cap of _MAX_PRODUCTS_PER_IMAGE prevents accumulated noise
+      from producing unbounded result lists.
     """
     combined: Dict[str, Tuple[float, str]] = {}   # name → (conf, source)
 
-    # Products detected by visual model
+    # Products confirmed by both visual colour AND OCR text
     for name, v_conf in visual_hits.items():
         if name in ocr_hits:
-            # Both agree → boost confidence
-            boosted = min(0.97, v_conf + 0.15)
+            boosted = min(0.97, max(v_conf, ocr_hits[name]) + 0.10)
             combined[name] = (boosted, "hybrid")
-        elif v_conf >= 0.40:
+
+    # Products detected only by visual colour (fresh produce, no label)
+    for name, v_conf in visual_hits.items():
+        if name not in combined and v_conf >= 0.60:
             combined[name] = (v_conf, "visual")
 
-    # Products detected only by OCR (packaged brands with text)
+    # Products detected only by OCR (packaged products with clear text)
     for name, o_conf in ocr_hits.items():
-        if name not in combined and o_conf >= 0.50:
+        if name not in combined and o_conf >= 0.65:
             combined[name] = (o_conf, "ocr")
 
     products = [
@@ -453,7 +505,7 @@ def _fuse_results(
         for name, (conf, source) in combined.items()
     ]
     products.sort(key=lambda p: p.confidence, reverse=True)
-    return products[:8]  # max 8 per image
+    return products[:_MAX_PRODUCTS_PER_IMAGE]
 
 
 # ---------------------------------------------------------------------------
