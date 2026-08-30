@@ -120,12 +120,40 @@ function showPincodeErr(errEl, inputEl, show) {
   inputEl.classList.toggle("invalid", show);
 }
 
+// ─── Receipt step animations ─────────────────────────────────────────────────
+// Advances .loading-app items through step-active → step-done states in sequence.
+// Purely visual — no effect on API calls or logic.
+let _stepTimer = null;
+
+function startStepAnimation(containerSelector) {
+  stopStepAnimation();
+  const steps = Array.from(document.querySelectorAll(containerSelector + " .loading-app"));
+  if (!steps.length) return;
+  steps.forEach(s => s.classList.remove("step-active", "step-done"));
+  let idx = 0;
+  function advance() {
+    if (idx > 0) steps[idx - 1].classList.replace("step-active", "step-done");
+    if (idx < steps.length) {
+      steps[idx].classList.add("step-active");
+      idx++;
+      _stepTimer = setTimeout(advance, 900);
+    }
+  }
+  advance();
+}
+
+function stopStepAnimation() {
+  if (_stepTimer) { clearTimeout(_stepTimer); _stepTimer = null; }
+}
+
 function setTextLoading(on) {
   loadingSection.classList.toggle("hidden", !on);
   formSection.classList.toggle("hidden", on);
   compareBtn.disabled = on;
   compareBtn.querySelector(".btn-text").classList.toggle("hidden", on);
   compareBtn.querySelector(".btn-loading").classList.toggle("hidden", !on);
+  if (on) startStepAnimation("#loading-section");
+  else    stopStepAnimation();
 }
 
 function setImageLoading(on) {
@@ -135,6 +163,8 @@ function setImageLoading(on) {
   analyseBtn.disabled = on;
   analyseBtn.querySelector(".btn-text").classList.toggle("hidden", on);
   analyseBtn.querySelector(".btn-loading").classList.toggle("hidden", !on);
+  if (on) startStepAnimation("#img-loading-section");
+  else    stopStepAnimation();
 }
 
 function updateLoadingStep(title, sub) {
