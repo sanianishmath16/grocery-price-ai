@@ -1,13 +1,13 @@
-/**
- * app.js — GroceryAI frontend logic (v3 — with image search)
+﻿/**
+ * app.js ΓÇö GroceryAI frontend logic (v3 ΓÇö with image search)
  *
  * TEXT SEARCH API  (unchanged):
  *   POST /api/compare  { items: string[], pincode: string }
- *   → CompareResponse  { results: AppPrice[], savings_tip: string, query_items: GroceryItem[] }
+ *   ΓåÆ CompareResponse  { results: AppPrice[], savings_tip: string, query_items: GroceryItem[] }
  *
  * IMAGE SEARCH API  (new):
  *   POST /api/analyze-images  { images_b64: string[], pincode: string }
- *   → ImageAnalyzeResponse {
+ *   ΓåÆ ImageAnalyzeResponse {
  *       vision_status: "ok"|"not_configured"|"no_products"|"error",
  *       detected: DetectedProduct[],
  *       compare_result: CompareResponse | null,
@@ -17,8 +17,8 @@
 
 "use strict";
 
-// ─── Config ────────────────────────────────────────────────────────────────
-// API_BASE is always same-origin ("") — nginx proxies /api/* to FastAPI
+// ΓöÇΓöÇΓöÇ Config ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// API_BASE is always same-origin ("") ΓÇö nginx proxies /api/* to FastAPI
 // in every environment: Docker local, VPS, Render, Fly.io, Railway.
 // No backend URL is ever hardcoded or exposed in this file.
 // The only time you would change this is if you serve the frontend from a
@@ -32,13 +32,13 @@ const JPEG_QUALITY = 0.82;     // canvas JPEG compression quality
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const APP_CONFIG = {
-  blinkit:   { icon: "⚡", label: "Blinkit" },
-  zepto:     { icon: "🟣", label: "Zepto" },
-  instamart: { icon: "🍊", label: "Instamart" },
-  flipkart:  { icon: "🔵", label: "Flipkart Min." },
+  blinkit:   { icon: "ΓÜí", label: "Blinkit" },
+  zepto:     { icon: "≡ƒƒú", label: "Zepto" },
+  instamart: { icon: "≡ƒìè", label: "Instamart" },
+  flipkart:  { icon: "≡ƒö╡", label: "Flipkart Min." },
 };
 
-// ─── DOM refs — Text search ─────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ DOM refs ΓÇö Text search ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const itemsInput     = document.getElementById("items-input");
 const pincodeInput   = document.getElementById("pincode-input");
 const compareBtn     = document.getElementById("compare-btn");
@@ -53,7 +53,7 @@ const breakdownSec   = document.getElementById("breakdown-section");
 const itemCount      = document.getElementById("item-count");
 const clearBtn       = document.getElementById("clear-btn");
 
-// ─── DOM refs — Image search ────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ DOM refs ΓÇö Image search ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 const imgPincodeInput  = document.getElementById("img-pincode-input");
 const imgPincodeError  = document.getElementById("img-pincode-error");
 const analyseBtn       = document.getElementById("analyse-btn");
@@ -76,7 +76,7 @@ const uploadCount      = document.getElementById("upload-count");
 const clearImagesBtn   = document.getElementById("clear-images-btn");
 const visionNotice     = document.getElementById("vision-notice");
 
-// ─── Tab state ──────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Tab state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function switchTab(tab) {
   const isText = tab === "text";
   document.getElementById("tab-text").classList.toggle("active", isText);
@@ -87,11 +87,11 @@ function switchTab(tab) {
   document.getElementById("panel-image").classList.toggle("hidden", isText);
 }
 
-// ─── Image state ────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Image state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 /** @type {{ file: File, b64: string, objectUrl: string }[]} */
 let uploadedImages = [];
 
-// ─── Item counter (text search) ─────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Item counter (text search) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function updateItemCount() {
   const n = getItems().length;
   itemCount.textContent = n === 0 ? "0 items" : n === 1 ? "1 item" : `${n} items`;
@@ -104,7 +104,7 @@ function getItems() {
 itemsInput.addEventListener("input", updateItemCount);
 clearBtn.addEventListener("click", () => { itemsInput.value = ""; updateItemCount(); itemsInput.focus(); });
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function showError(el, msg) {
   el.textContent = msg;
   el.classList.remove("hidden");
@@ -120,47 +120,12 @@ function showPincodeErr(errEl, inputEl, show) {
   inputEl.classList.toggle("invalid", show);
 }
 
-// ─── Receipt step animations ─────────────────────────────────────────────────
-// Advances .loading-app items through step-active → step-done states in sequence.
-// Purely visual — no effect on API calls or logic.
-let _stepTimer = null;
-
-function startStepAnimation(containerSelector) {
-  stopStepAnimation();
-  const steps = Array.from(document.querySelectorAll(containerSelector + " .loading-app"));
-  if (!steps.length) return;
-  steps.forEach(s => s.classList.remove("step-active", "step-done"));
-  let idx = 0;
-  function advance() {
-    if (idx > 0) steps[idx - 1].classList.replace("step-active", "step-done");
-    if (idx < steps.length) {
-      steps[idx].classList.add("step-active");
-      idx++;
-      _stepTimer = setTimeout(advance, 900);
-    }
-  }
-  advance();
-}
-
-function stopStepAnimation() {
-  if (_stepTimer) { clearTimeout(_stepTimer); _stepTimer = null; }
-}
-
 function setTextLoading(on) {
   loadingSection.classList.toggle("hidden", !on);
-  // When the device panel is present (desktop), keep formSection visible so the
-  // device itself acts as the loading indicator via setDeviceState().
-  const hasDevice = !!document.getElementById("scanner-device");
-  if (!hasDevice) formSection.classList.toggle("hidden", on);
+  formSection.classList.toggle("hidden", on);
   compareBtn.disabled = on;
   compareBtn.querySelector(".btn-text").classList.toggle("hidden", on);
   compareBtn.querySelector(".btn-loading").classList.toggle("hidden", !on);
-  if (on) {
-    startStepAnimation("#loading-section");
-    setDeviceState("scanning");
-  } else {
-    stopStepAnimation();
-  }
 }
 
 function setImageLoading(on) {
@@ -170,8 +135,6 @@ function setImageLoading(on) {
   analyseBtn.disabled = on;
   analyseBtn.querySelector(".btn-text").classList.toggle("hidden", on);
   analyseBtn.querySelector(".btn-loading").classList.toggle("hidden", !on);
-  if (on) startStepAnimation("#img-loading-section");
-  else    stopStepAnimation();
 }
 
 function updateLoadingStep(title, sub) {
@@ -179,8 +142,8 @@ function updateLoadingStep(title, sub) {
   imgLoadingSub.textContent = sub;
 }
 
-function formatPrice(n)     { return "₹" + n.toFixed(0); }
-function formatPriceFull(n) { return "₹" + n.toFixed(2); }
+function formatPrice(n)     { return "Γé╣" + n.toFixed(0); }
+function formatPriceFull(n) { return "Γé╣" + n.toFixed(2); }
 
 function confClass(s) {
   if (s === 0)  return "conf-none";
@@ -196,9 +159,9 @@ function confLabel(s) {
   return "Low";
 }
 
-// ─── Image compression ───────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Image compression ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 /**
- * Resize a File to ≤ MAX_IMAGE_PX on the longest side, then return base64 JPEG.
+ * Resize a File to Γëñ MAX_IMAGE_PX on the longest side, then return base64 JPEG.
  * @param {File} file
  * @returns {Promise<string>} raw base64 (no data URI prefix)
  */
@@ -227,7 +190,7 @@ async function compressImage(file) {
   });
 }
 
-// ─── Image upload handling ───────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Image upload handling ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function addFiles(files) {
   clearError(imgUploadError);
   const incoming = Array.from(files);
@@ -296,7 +259,7 @@ function renderThumbs() {
     btn.className = "thumb-remove";
     btn.type = "button";
     btn.setAttribute("aria-label", `Remove image ${idx + 1}`);
-    btn.innerHTML = "×";
+    btn.innerHTML = "├ù";
     btn.addEventListener("click", (e) => { e.stopPropagation(); removeImage(idx); });
 
     div.appendChild(img);
@@ -305,7 +268,7 @@ function renderThumbs() {
   });
 }
 
-// ─── Drop zone events ────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Drop zone events ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 dropZone.addEventListener("click", (e) => {
   if (e.target === browseBtn || browseBtn.contains(e.target)) return;
   fileInput.click();
@@ -345,7 +308,7 @@ clearImagesBtn.addEventListener("click", clearAllImages);
 pincodeInput.addEventListener("keydown", e => { if (e.key === "Enter") compareItems(); });
 imgPincodeInput.addEventListener("keydown", e => { if (e.key === "Enter") analyseImages(); });
 
-// ─── TEXT SEARCH ─────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ TEXT SEARCH ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function compareItems() {
   clearError(errorMsg);
   showPincodeErr(pincodeError, pincodeInput, false);
@@ -415,19 +378,12 @@ function renderCompareResults(data, cardsEl, bdSec, tipEl, resultsSec) {
 
   resultsSec.classList.remove("hidden");
   resultsSec.scrollIntoView({ behavior: "smooth", block: "start" });
-
-  // ── Scanner device display (text-search path) ──────────────────────────
-  // The device panel lives in #form-section and is always visible on desktop.
-  // renderScannerResults does all the laser/barcode/staggered animation.
-  if (document.getElementById("scanner-device")) {
-    renderScannerResults(data);
-  }
 }
 
 function buildAppCard(app, rank) {
   const isBest = rank === 0;
-  const cfg    = APP_CONFIG[app.app_name] || { icon: "🛒", label: app.app_name };
-  const rankEmoji = ["🥇", "🥈", "🥉", "4️⃣"][rank] || `${rank + 1}`;
+  const cfg    = APP_CONFIG[app.app_name] || { icon: "≡ƒ¢Æ", label: app.app_name };
+  const rankEmoji = ["≡ƒÑç", "≡ƒÑê", "≡ƒÑë", "4∩╕ÅΓâú"][rank] || `${rank + 1}`;
   const totalItems = app.items_found + app.items_missing.length;
 
   const deliveryHtml = app.delivery_fee > 0
@@ -439,7 +395,7 @@ function buildAppCard(app, rank) {
     : "";
 
   const missingHtml = app.items_missing.length > 0
-    ? `<div class="app-card-missing">⚠ Not found: ${app.items_missing.join(", ")}</div>`
+    ? `<div class="app-card-missing">ΓÜá Not found: ${app.items_missing.join(", ")}</div>`
     : "";
 
   const card = document.createElement("div");
@@ -467,7 +423,7 @@ function buildBreakdownSection(data) {
   const toggle = document.createElement("button");
   toggle.className = "breakdown-toggle";
   toggle.setAttribute("aria-expanded", "false");
-  toggle.innerHTML = `<span>Per-item Price Breakdown</span><span class="breakdown-toggle-icon" aria-hidden="true">▾</span>`;
+  toggle.innerHTML = `<span>Per-item Price Breakdown</span><span class="breakdown-toggle-icon" aria-hidden="true">Γû╛</span>`;
 
   const tableWrap = document.createElement("div");
   tableWrap.className = "breakdown-table-wrap hidden";
@@ -523,7 +479,7 @@ function buildBreakdownSection(data) {
   return wrapper;
 }
 
-// ─── TEXT SEARCH RESET ───────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ TEXT SEARCH RESET ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function resetForm() {
   resultsSection.classList.add("hidden");
   formSection.classList.remove("hidden");
@@ -531,10 +487,9 @@ function resetForm() {
   showPincodeErr(pincodeError, pincodeInput, false);
   window.scrollTo({ top: 0, behavior: "smooth" });
   itemsInput.focus();
-  resetDeviceScreen();
 }
 
-// ─── IMAGE SEARCH ─────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ IMAGE SEARCH ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function analyseImages() {
   clearError(imgErrorMsg);
   clearError(imgUploadError);
@@ -558,12 +513,12 @@ async function analyseImages() {
   imgResultsSec.classList.add("hidden");
 
   setImageLoading(true);
-  updateLoadingStep("Analysing images…", `Processing ${uploadedImages.length} image(s)`);
+  updateLoadingStep("Analysing imagesΓÇª", `Processing ${uploadedImages.length} image(s)`);
 
   try {
     const images_b64 = uploadedImages.map(img => img.b64);
 
-    updateLoadingStep("Detecting products…", "Identifying grocery items in your photos");
+    updateLoadingStep("Detecting productsΓÇª", "Identifying grocery items in your photos");
 
     const resp = await fetch(`${API_BASE}/api/analyze-images`, {
       method: "POST",
@@ -593,13 +548,13 @@ function handleImageResponse(data, pincode) {
 
   const status = data.vision_status;
 
-  // ── Not configured (no API key set) ──────────────────────────────────────
+  // ΓöÇΓöÇ Not configured (no API key set) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   if (status === "not_configured") {
     visionNotice.classList.remove("hidden");
     return;
   }
 
-  // ── Quota exhausted (credits used up) ────────────────────────────────────
+  // ΓöÇΓöÇ Quota exhausted (credits used up) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   if (status === "quota_exhausted") {
     showVisionUnavailable(
       "Image recognition is temporarily unavailable because the AI service has reached its usage limit.",
@@ -608,7 +563,7 @@ function handleImageResponse(data, pincode) {
     return;
   }
 
-  // ── Transient rate limit ──────────────────────────────────────────────────
+  // ΓöÇΓöÇ Transient rate limit ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   if (status === "rate_limited") {
     showError(imgErrorMsg,
       "The AI service is currently busy. Please wait a moment and try again. Text search is still available."
@@ -616,7 +571,7 @@ function handleImageResponse(data, pincode) {
     return;
   }
 
-  // ── Authentication / key problem ─────────────────────────────────────────
+  // ΓöÇΓöÇ Authentication / key problem ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   if (status === "auth_error") {
     showError(imgErrorMsg,
       "Image recognition could not connect to the AI service. Please contact the site administrator."
@@ -624,7 +579,7 @@ function handleImageResponse(data, pincode) {
     return;
   }
 
-  // ── Generic error or no products found ───────────────────────────────────
+  // ΓöÇΓöÇ Generic error or no products found ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   if (status === "error" || status === "no_products") {
     const msg = data.error_message
       || "We couldn't identify any products. Try uploading a clearer image.";
@@ -632,7 +587,7 @@ function handleImageResponse(data, pincode) {
     return;
   }
 
-  // ── OK — show detected products for review ───────────────────────────────
+  // ΓöÇΓöÇ OK ΓÇö show detected products for review ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   if (data.detected && data.detected.length > 0) {
     renderDetectedProducts(data.detected);
 
@@ -667,7 +622,7 @@ function renderDetectedProducts(detected) {
     const check = document.createElement("span");
     check.className = "detected-check";
     check.setAttribute("aria-hidden", "true");
-    check.textContent = "✓";
+    check.textContent = "Γ£ô";
 
     const input = document.createElement("input");
     input.type = "text";
@@ -712,7 +667,7 @@ async function compareDetected() {
   const btn = document.getElementById("compare-detected-btn");
   btn.disabled = true;
   const origText = btn.innerHTML;
-  btn.innerHTML = `<span class="btn-spinner" style="border:2px solid rgba(255,255,255,.35);border-top-color:#fff;width:15px;height:15px;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;margin-right:6px"></span> Comparing…`;
+  btn.innerHTML = `<span class="btn-spinner" style="border:2px solid rgba(255,255,255,.35);border-top-color:#fff;width:15px;height:15px;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;margin-right:6px"></span> ComparingΓÇª`;
 
   try {
     const resp = await fetch(`${API_BASE}/api/compare`, {
@@ -761,7 +716,7 @@ function renderImageCompareResults(data) {
   imgResultsSec.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ─── IMAGE SEARCH RESET ──────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ IMAGE SEARCH RESET ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 function resetImageSearch() {
   imgResultsSec.classList.add("hidden");
   detectedSection.classList.add("hidden");
@@ -773,263 +728,4 @@ function resetImageSearch() {
   showPincodeErr(imgPincodeError, imgPincodeInput, false);
   visionNotice.classList.add("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// SCANNER DEVICE — purely visual presentation layer
-// Hooks: renderScannerResults(data), setDeviceState(state), resetDeviceScreen()
-// No API calls. No form logic. Respects prefers-reduced-motion.
-// ════════════════════════════════════════════════════════════════════════════
-
-const _prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-// Brand color map for price chips + total dots
-const APP_BRAND_COLORS = {
-  blinkit:   "#F8D030",
-  zepto:     "#8219C8",
-  instamart: "#E07014",
-  flipkart:  "#2874F0",
-};
-
-/**
- * Drive the device LED + status label.
- * state: "idle" | "scanning" | "done"
- */
-function setDeviceState(state) {
-  const led   = document.getElementById("device-led");
-  const label = document.getElementById("device-status-label");
-  if (!led || !label) return;
-  led.className   = "device-led " + state;
-  label.textContent = state === "idle" ? "Ready" : state === "scanning" ? "Scanning…" : "Complete";
-}
-
-/**
- * Reset the device screen back to the idle/empty state.
- * Called by resetForm().
- */
-function resetDeviceScreen() {
-  const idle    = document.getElementById("screen-idle");
-  const readout = document.getElementById("screen-readout");
-  const totals  = document.getElementById("screen-totals");
-  const savings = document.getElementById("screen-savings");
-  if (idle)    idle.classList.remove("hidden");
-  if (readout) { readout.classList.add("hidden"); readout.innerHTML = ""; }
-  if (totals)  { totals.classList.add("hidden");  totals.innerHTML  = ""; }
-  if (savings) savings.classList.add("hidden");
-  setDeviceState("idle");
-}
-
-/**
- * Generate a decorative barcode SVG element for a given text seed.
- * Bar widths are seeded from the item name so the same item always
- * gets the same barcode pattern. Purely decorative.
- */
-function buildBarcode(seed) {
-  // Simple deterministic sequence from char codes
-  let n = 0;
-  for (let i = 0; i < seed.length; i++) n = (n * 31 + seed.charCodeAt(i)) >>> 0;
-
-  const container = document.createElement("div");
-  container.className = "scan-barcode";
-  container.setAttribute("aria-hidden", "true");
-
-  // Generate 14–18 bars of varying height (60–100%) and width (1–3px)
-  const numBars = 14 + (n % 5);
-  for (let i = 0; i < numBars; i++) {
-    n = (n * 1664525 + 1013904223) >>> 0;  // LCG step
-    const bar = document.createElement("div");
-    bar.className = "scan-barcode-bar";
-    const h = 55 + (n % 45);              // 55–100%
-    const w = 1 + (n % 3);               // 1–3px
-    bar.style.height  = h + "%";
-    bar.style.width   = w + "px";
-    container.appendChild(bar);
-  }
-  return container;
-}
-
-/**
- * Main scanner renderer.
- * Called after a successful /api/compare response on the text-search tab.
- *
- * Sequence:
- *   1. Show laser sweep animation
- *   2. After sweep (~900ms), hide idle screen, show readout
- *   3. Reveal each item row one-by-one with 180ms stagger
- *   4. After all items, show totals + savings tip
- *   5. Set LED to "done"
- */
-function renderScannerResults(data) {
-  const laserEl   = document.getElementById("laser-line");
-  const idle      = document.getElementById("screen-idle");
-  const readout   = document.getElementById("screen-readout");
-  const totalsEl  = document.getElementById("screen-totals");
-  const savingsEl = document.getElementById("screen-savings");
-  if (!laserEl || !readout) return;
-
-  // Clear previous run
-  readout.innerHTML = "";
-  readout.classList.add("hidden");
-  if (totalsEl)  { totalsEl.classList.add("hidden"); totalsEl.innerHTML = ""; }
-  if (savingsEl) savingsEl.classList.add("hidden");
-
-  setDeviceState("scanning");
-
-  // Build item rows for each query item × each app
-  // Structure: per query_item → show all app prices as chips
-  const items = (data.query_items || []).map(qi => qi);
-  const results = data.results || [];
-
-  // For each item, compute min price across apps (to mark cheapest chip)
-  const itemRows = items.map((item) => {
-    const appPrices = results.map(app => {
-      const match = app.matches && (
-        app.matches.find(m => m.query && m.query.toLowerCase().includes(item.name.toLowerCase()))
-        || app.matches[items.indexOf(item)]
-      );
-      return {
-        appName: app.app_name,
-        found:   match && match.found,
-        price:   match && match.found ? match.price : null,
-      };
-    });
-    const foundPrices = appPrices.filter(a => a.found && a.price != null).map(a => a.price);
-    const minPrice = foundPrices.length ? Math.min(...foundPrices) : null;
-    return { item, appPrices, minPrice };
-  });
-
-  // ── Step 1: laser sweep ───────────────────────────────────────────────────
-  const SWEEP_MS  = _prefersReducedMotion ? 0  : 900;
-  const STAGGER   = _prefersReducedMotion ? 0  : 180;
-  const TOTALS_DELAY = _prefersReducedMotion ? 0 : 200;
-
-  if (!_prefersReducedMotion) {
-    laserEl.classList.remove("sweeping");
-    // force reflow to restart animation
-    void laserEl.offsetWidth;
-    laserEl.classList.add("sweeping");
-  }
-
-  setTimeout(() => {
-    // ── Step 2: hide idle, show readout ──────────────────────────────────
-    if (idle) idle.classList.add("hidden");
-    readout.classList.remove("hidden");
-
-    // ── Step 3: build and stagger items ──────────────────────────────────
-    itemRows.forEach(({ item, appPrices, minPrice }, rowIdx) => {
-      const row = document.createElement("div");
-      row.className = "scan-item";
-
-      // Header: barcode + item name + confirm beep
-      const header = document.createElement("div");
-      header.className = "scan-item-header";
-
-      const bc = buildBarcode(item.raw || item.name);
-      header.appendChild(bc);
-
-      const nameEl = document.createElement("span");
-      nameEl.className = "scan-item-name";
-      nameEl.textContent = (item.raw || item.name).toUpperCase();
-      header.appendChild(nameEl);
-
-      const confirmEl = document.createElement("span");
-      confirmEl.className = "scan-confirm";
-      confirmEl.textContent = "✔ SCAN";
-      header.appendChild(confirmEl);
-
-      row.appendChild(header);
-
-      // Price chips grid
-      const chipsGrid = document.createElement("div");
-      chipsGrid.className = "scan-prices";
-
-      appPrices.forEach(({ appName, found, price }) => {
-        const chip = document.createElement("div");
-        chip.className = "price-chip" +
-          (found && price != null && minPrice != null && Math.abs(price - minPrice) < 0.001 ? " cheapest" : "") +
-          (!found ? " not-found" : "");
-
-        const dot = document.createElement("span");
-        dot.className = "price-chip-dot";
-        dot.style.background = APP_BRAND_COLORS[appName] || "#666";
-        chip.appendChild(dot);
-
-        const lbl = document.createElement("span");
-        lbl.className = "price-chip-label";
-        lbl.textContent = APP_CONFIG[appName]?.label || appName;
-        chip.appendChild(lbl);
-
-        const val = document.createElement("span");
-        val.className = "price-chip-value";
-        val.textContent = found && price != null ? formatPrice(price) : "—";
-        chip.appendChild(val);
-
-        chipsGrid.appendChild(chip);
-      });
-
-      row.appendChild(chipsGrid);
-      readout.appendChild(row);
-
-      // Staggered reveal
-      setTimeout(() => row.classList.add("visible"), SWEEP_MS * 0 + rowIdx * STAGGER + 20);
-    });
-
-    // ── Step 4: totals + savings ──────────────────────────────────────────
-    const lastItemDelay = itemRows.length * STAGGER + TOTALS_DELAY;
-    setTimeout(() => {
-      if (totalsEl) {
-        totalsEl.innerHTML = "";
-
-        const hdr = document.createElement("div");
-        hdr.className = "totals-heading";
-        hdr.textContent = "── Cart Total ──";
-        totalsEl.appendChild(hdr);
-
-        results.forEach((app, idx) => {
-          const isBest = idx === 0;
-          const row = document.createElement("div");
-          row.className = "total-row" + (isBest ? " best" : "");
-
-          const dot = document.createElement("span");
-          dot.className = "total-app-dot";
-          dot.style.background = APP_BRAND_COLORS[app.app_name] || "#666";
-          row.appendChild(dot);
-
-          const name = document.createElement("span");
-          name.className = "total-app-name";
-          name.textContent = APP_CONFIG[app.app_name]?.label || app.app_name;
-          row.appendChild(name);
-
-          if (isBest) {
-            const tag = document.createElement("span");
-            tag.className = "total-best-tag";
-            tag.textContent = "BEST";
-            row.appendChild(tag);
-          }
-
-          const delivery = document.createElement("span");
-          delivery.className = "total-delivery";
-          delivery.textContent = app.delivery_fee > 0 ? `+${formatPrice(app.delivery_fee)} del` : "free del";
-          row.appendChild(delivery);
-
-          const price = document.createElement("span");
-          price.className = "total-price";
-          price.textContent = formatPrice(app.total_price);
-          row.appendChild(price);
-
-          totalsEl.appendChild(row);
-        });
-
-        totalsEl.classList.remove("hidden");
-      }
-
-      if (savingsEl && data.savings_tip) {
-        savingsEl.textContent = data.savings_tip;
-        savingsEl.classList.remove("hidden");
-      }
-
-      setDeviceState("done");
-    }, lastItemDelay);
-
-  }, SWEEP_MS);
 }
