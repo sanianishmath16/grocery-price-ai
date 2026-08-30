@@ -4,8 +4,8 @@
   "description": "Compare grocery prices across Blinkit, Zepto, Instamart and Flipkart Minutes.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f0f4f8",
-  "theme_color": "#1d4ed8",
+  "background_color": "#f6f8fa",
+  "theme_color": "#16a34a",
   "orientation": "portrait-primary",
   "lang": "en",
   "icons": [
