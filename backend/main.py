@@ -1,40 +1,44 @@
 """
-main.py — FastAPI application entry point for GroceryAI.
+main.py — FastAPI application entry point for GroceryAI v2.
 
 Endpoints
 ---------
-POST /api/compare        — compare prices across all apps for a grocery list
-POST /api/analyze-images — identify products from images, then compare prices
-GET  /api/health         — simple health check
-GET  /api/apps           — list of supported apps
-GET  /                   — serves frontend/index.html (fallback when nginx is
-                           not the public entry point, e.g. Render free tier)
+GET  /api/health                    — health check
+GET  /api/apps                      — list supported platforms
+GET  /api/categories                — list product categories
+GET  /api/products                  — list all products (filterable by category)
+GET  /api/product/{product_id}      — get a single product's details
+GET  /api/product/{product_id}/compare — compare that product across all platforms
+GET  /api/check-availability        — check platform availability for a pincode
+GET  /api/platforms                 — list platform metadata
+POST /api/compare                   — legacy text-based comparison (kept for compatibility)
 """
 
 import logging
 import sys
 import os
 
-# Allow imports relative to /backend (for running outside Docker too)
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from typing import Optional, List
 
-from config import SUPPORTED_APPS, CORS_ORIGINS, MAX_IMAGE_SIZE_BYTES, MAX_IMAGES
+from config import SUPPORTED_APPS, CORS_ORIGINS, MAX_IMAGE_SIZE_BYTES
 from models.schemas import (
     CompareRequest, CompareResponse,
-    ImageAnalyzeRequest, ImageAnalyzeResponse, DetectedProductSchema,
 )
 from ai.normalizer import normalize
-from ai.vision_service import identify_products, VisionStatus
 from services import aggregator, ranker as ranker_svc
 from cache import redis_cache
+from data.products import CATEGORIES, PRODUCTS, PRODUCT_BY_ID, PRODUCTS_BY_CATEGORY
+from data.platforms import (
+    PLATFORMS, PLATFORM_BY_ID,
+    get_product_comparison, check_availability,
+)
 
-# ---------------------------------------------------------------------------
-# Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
@@ -42,17 +46,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Static frontend directory
-# In the prod Docker image the frontend is copied to /usr/share/nginx/html.
-# When running locally (outside Docker) we fall back to ../frontend relative
-# to this file.  If neither path exists, static serving is silently skipped
-# and the app works as an API-only server.
-# ---------------------------------------------------------------------------
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _FRONTEND_CANDIDATES = [
-    "/usr/share/nginx/html",           # prod Docker image
-    os.path.join(_THIS_DIR, "..", "frontend"),  # local / dev
+    "/usr/share/nginx/html",
+    os.path.join(_THIS_DIR, "..", "frontend"),
 ]
 FRONTEND_DIR: str | None = next(
     (p for p in _FRONTEND_CANDIDATES if os.path.isfile(os.path.join(p, "index.html"))),
@@ -60,12 +57,10 @@ FRONTEND_DIR: str | None = next(
 )
 
 # ---------------------------------------------------------------------------
-# App
-# ---------------------------------------------------------------------------
 app = FastAPI(
     title="GroceryAI",
     description="Compare grocery prices across Blinkit, Zepto, Instamart and Flipkart Minutes.",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -78,215 +73,143 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# Endpoints
+# Meta endpoints
 # ---------------------------------------------------------------------------
 
 @app.get("/api/health", tags=["meta"])
 async def health():
-    """Returns 200 OK when the service is running."""
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 @app.get("/api/apps", tags=["meta"])
 async def list_apps():
-    """Return the list of supported grocery apps."""
     return {"apps": SUPPORTED_APPS}
 
+
+@app.get("/api/platforms", tags=["meta"])
+async def list_platforms():
+    """Return platform metadata (name, color, logo, etc.)."""
+    return {"platforms": PLATFORMS}
+
+
+# ---------------------------------------------------------------------------
+# Catalogue endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/categories", tags=["catalogue"])
+async def list_categories():
+    """Return all grocery categories."""
+    return {"categories": CATEGORIES}
+
+
+@app.get("/api/products", tags=["catalogue"])
+async def list_products(
+    category: Optional[str] = Query(None, description="Filter by category id"),
+    q: Optional[str] = Query(None, description="Search query"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """
+    List products, optionally filtered by category and/or search query.
+    """
+    if category:
+        products = PRODUCTS_BY_CATEGORY.get(category, [])
+    else:
+        products = PRODUCTS
+
+    if q:
+        q_lower = q.lower()
+        products = [
+            p for p in products
+            if q_lower in p["name"].lower()
+            or q_lower in p["id"].lower()
+            or any(q_lower in tag.lower() for tag in p.get("tags", []))
+        ]
+
+    return {"products": products[:limit], "total": len(products)}
+
+
+@app.get("/api/product/{product_id}", tags=["catalogue"])
+async def get_product(product_id: str):
+    """Get detailed info for a single product."""
+    product = PRODUCT_BY_ID.get(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail=f"Product '{product_id}' not found.")
+    return {"product": product}
+
+
+@app.get("/api/product/{product_id}/compare", tags=["compare"])
+async def compare_product(
+    product_id: str,
+    pincode: str = Query(..., pattern=r"^\d{6}$", description="6-digit delivery pincode"),
+):
+    """
+    Compare a specific product across all platforms for a given pincode.
+
+    Returns platform-specific pricing, quantity, quality, availability,
+    delivery time, and price history. Identifies the cheapest option
+    using normalized price (₹/kg, ₹/L, ₹/pc).
+    """
+    if product_id not in PRODUCT_BY_ID:
+        raise HTTPException(status_code=404, detail=f"Product '{product_id}' not found.")
+
+    result = get_product_comparison(product_id, pincode)
+    return result
+
+
+@app.get("/api/check-availability", tags=["availability"])
+async def check_pincode_availability(
+    pincode: str = Query(..., pattern=r"^\d{6}$", description="6-digit delivery pincode"),
+):
+    """
+    Check which platforms deliver to the given pincode.
+    """
+    return check_availability(pincode)
+
+
+# ---------------------------------------------------------------------------
+# Legacy text-based compare (kept for backward compatibility)
+# ---------------------------------------------------------------------------
 
 @app.post("/api/compare", response_model=CompareResponse, tags=["compare"])
 async def compare_prices(body: CompareRequest):
     """
-    Compare grocery prices across all supported apps.
-
-    Body
-    ----
-    ```json
-    {
-      "items": ["Amul Milk 1L", "Maggi 70g x5"],
-      "pincode": "560001"
-    }
-    ```
-
-    Returns a ranked list (cheapest first) with per-item breakdowns.
+    Compare grocery prices across all supported apps (legacy text-based endpoint).
     """
     if not body.items:
         raise HTTPException(status_code=422, detail="items list must not be empty")
 
-    # --- 1. Check cache ---
     cache_key = redis_cache.make_key("compare", body.items, body.pincode)
     cached = await redis_cache.get_cached(cache_key)
     if cached:
-        logger.info("Cache hit for key %s", cache_key)
         return CompareResponse(**cached)
 
-    # --- 2. Normalise items ---
     normalised = [normalize(item) for item in body.items]
-    logger.info("Normalised %d items for pincode %s", len(normalised), body.pincode)
-
-    # --- 3. Aggregate prices from all scrapers in parallel ---
     app_prices = await aggregator.aggregate_all(normalised, body.pincode)
 
     if not app_prices:
-        raise HTTPException(
-            status_code=503,
-            detail="All scrapers failed. Please try again later.",
-        )
+        raise HTTPException(status_code=503, detail="All scrapers failed. Please try again later.")
 
-    # --- 4. Rank results ---
     ranked = ranker_svc.rank(app_prices)
     tip = ranker_svc.savings_tip(ranked)
+    response = CompareResponse(results=ranked, savings_tip=tip, query_items=normalised)
 
-    response = CompareResponse(
-        results=ranked,
-        savings_tip=tip,
-        query_items=normalised,
-    )
-
-    # --- 5. Cache the response ---
     await redis_cache.set_cached(cache_key, response.model_dump())
-
     return response
 
 
-@app.post("/api/analyze-images", response_model=ImageAnalyzeResponse, tags=["images"])
-async def analyze_images(body: ImageAnalyzeRequest):
-    """
-    Identify grocery products from uploaded images, then compare prices.
-
-    Body
-    ----
-    ```json
-    {
-      "images_b64": ["<base64 string>", ...],
-      "pincode": "560001"
-    }
-    ```
-
-    Each base64 string is a JPEG/PNG/WEBP image pre-resized client-side to ≤ 1024px.
-    Returns detected products and, if any are found, a full price comparison.
-
-    NOTE: Requires OPENAI_API_KEY environment variable to be set.
-    See backend/ai/vision_service.py for setup instructions.
-    """
-    # --- Validate image sizes server-side ---
-    for i, b64 in enumerate(body.images_b64):
-        try:
-            import base64 as _b64
-            decoded_size = len(_b64.b64decode(b64, validate=True))
-        except Exception:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Image {i + 1} is not valid base64 data.",
-            )
-        if decoded_size > MAX_IMAGE_SIZE_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=(
-                    f"Image {i + 1} is too large ({decoded_size // 1024} KB). "
-                    f"Maximum allowed is {MAX_IMAGE_SIZE_BYTES // 1024} KB per image."
-                ),
-            )
-
-    logger.info("Analyzing %d images for pincode %s", len(body.images_b64), body.pincode)
-
-    # --- 1. Run vision service ---
-    try:
-        vision_result = await identify_products(body.images_b64)
-    except Exception as exc:
-        logger.exception("Unhandled exception in vision pipeline: %s", exc)
-        return ImageAnalyzeResponse(
-            vision_status=VisionStatus.ERROR.value,
-            error_message=(
-                "Image analysis encountered an unexpected error. "
-                "Please try again, or use Text Search to compare prices."
-            ),
-        )
-
-    # All non-OK statuses: return early with the user-friendly message.
-    # These include: NOT_CONFIGURED, QUOTA_EXHAUSTED, RATE_LIMITED, AUTH_ERROR,
-    # ERROR, NO_PRODUCTS — none of which should expose raw internal details.
-    if vision_result.status != VisionStatus.OK:
-        logger.info(
-            "Vision service returned non-OK status '%s' for %d image(s): %s",
-            vision_result.status,
-            len(body.images_b64),
-            vision_result.error_message[:120],
-        )
-        return ImageAnalyzeResponse(
-            vision_status=vision_result.status.value,
-            error_message=vision_result.error_message or "Image analysis could not be completed.",
-        )
-
-    # --- 2. Convert detected products to schema ---
-    detected = [
-        DetectedProductSchema(
-            name=p.name,
-            confidence=p.confidence,
-            from_image_index=p.from_image_index,
-        )
-        for p in vision_result.products
-    ]
-    product_names = [p.name for p in vision_result.products]
-
-    logger.info("Vision identified %d products: %s", len(product_names), product_names[:5])
-
-    # --- 3. Run price comparison for identified products ---
-    try:
-        cache_key = redis_cache.make_key("compare", product_names, body.pincode)
-        cached = await redis_cache.get_cached(cache_key)
-        if cached:
-            compare_response = CompareResponse(**cached)
-        else:
-            normalised = [normalize(name) for name in product_names]
-            app_prices = await aggregator.aggregate_all(normalised, body.pincode)
-            if app_prices:
-                ranked = ranker_svc.rank(app_prices)
-                tip = ranker_svc.savings_tip(ranked)
-                compare_response = CompareResponse(
-                    results=ranked,
-                    savings_tip=tip,
-                    query_items=normalised,
-                )
-                await redis_cache.set_cached(cache_key, compare_response.model_dump())
-            else:
-                compare_response = None
-    except Exception as exc:
-        logger.exception("Price comparison failed after vision: %s", exc)
-        compare_response = None
-
-    return ImageAnalyzeResponse(
-        vision_status=VisionStatus.OK.value,
-        detected=detected,
-        compare_result=compare_response,
-    )
-
-
 # ---------------------------------------------------------------------------
-# Frontend static files — mounted AFTER all /api/* routes so API routes win.
-#
-# This makes uvicorn itself serve the frontend when nginx is not the public
-# entry point (e.g. when Render runs the container without BUILD_TARGET=prod
-# or when the service was created manually via the Render dashboard UI).
-#
-# Route priority (FastAPI processes routes top-to-bottom):
-#   /api/*   → handled by the endpoint functions above
-#   /        → FileResponse(index.html)
-#   /app.js, /style.css, /favicon.svg, etc. → StaticFiles
+# Frontend static files
 # ---------------------------------------------------------------------------
 if FRONTEND_DIR:
     logger.info("Serving frontend from: %s", FRONTEND_DIR)
 
     @app.get("/", include_in_schema=False)
     async def serve_index():
-        """Serve the GroceryAI SPA root page."""
         return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
-    # Mount all other static assets (JS, CSS, images, manifest, etc.)
-    # The mount must come last — it acts as a catch-all for unmatched paths.
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 else:
     logger.warning(
-        "Frontend directory not found (checked %s). "
-        "Running as API-only — set FRONTEND_DIR env var if needed.",
+        "Frontend directory not found (checked %s). Running as API-only.",
         _FRONTEND_CANDIDATES,
     )

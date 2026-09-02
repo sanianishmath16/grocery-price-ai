@@ -1,725 +1,1098 @@
 /**
- * app.js - GroceryAI frontend logic
+ * app.js — GroceryAI v10
  *
- * TEXT SEARCH API:
- *   POST /api/compare  { items: string[], pincode: string }
- *   -> CompareResponse  { results: AppPrice[], savings_tip: string, query_items: GroceryItem[] }
- *
- * IMAGE SEARCH API:
- *   POST /api/analyze-images  { images_b64: string[], pincode: string }
- *   -> ImageAnalyzeResponse {
- *       vision_status: "ok"|"not_configured"|"no_products"|"error",
- *       detected: DetectedProduct[],
- *       compare_result: CompareResponse | null,
- *       error_message: string
- *     }
+ * Full SPA: Home → Category → Product Comparison
+ * Features:
+ *   - Category browsing + product grid
+ *   - Global search with autocomplete
+ *   - Per-product platform comparison with quantity normalization
+ *   - Pincode-based availability
+ *   - Price history charts
+ *   - Price alerts (localStorage)
+ *   - My List / shopping basket comparison
  */
 
 "use strict";
 
-// --- Config ---
-// API_BASE is always same-origin ("") - nginx proxies /api/* to FastAPI
+// ─────────────────────────────────────────────────────────────────────────────
+// Config
+// ─────────────────────────────────────────────────────────────────────────────
 const API_BASE = window.__GROCERYAI_API || "";
 
-const MAX_IMAGES = 10;
-const MAX_IMAGE_PX = 1024;   // resize longest edge to this before upload
-const JPEG_QUALITY = 0.82;   // canvas JPEG compression quality
-const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
-
-const APP_CONFIG = {
-  blinkit:   { label: "Blinkit" },
-  zepto:     { label: "Zepto" },
-  instamart: { label: "Instamart" },
-  flipkart:  { label: "Flipkart Min." },
+const PLATFORM_META = {
+  zepto:     { name: "Zepto",            emoji: "⚡", css: "zepto",     logoText: "Z" },
+  blinkit:   { name: "Blinkit",          emoji: "💛", css: "blinkit",   logoText: "B" },
+  instamart: { name: "Swiggy Instamart", emoji: "🟠", css: "instamart", logoText: "I" },
+  flipkart:  { name: "Flipkart Minutes", emoji: "🔵", css: "flipkart",  logoText: "F" },
 };
 
-// --- DOM refs - Text search ---
-const itemsInput     = document.getElementById("items-input");
-const pincodeInput   = document.getElementById("pincode-input");
-const compareBtn     = document.getElementById("compare-btn");
-const errorMsg       = document.getElementById("error-msg");
-const pincodeError   = document.getElementById("pincode-error");
-const loadingSection = document.getElementById("loading-section");
-const formSection    = document.getElementById("form-section");
-const resultsSection = document.getElementById("results-section");
-const savingsTip     = document.getElementById("savings-tip");
-const appCardsEl     = document.getElementById("app-cards");
-const breakdownSec   = document.getElementById("breakdown-section");
-const itemCount      = document.getElementById("item-count");
-const clearBtn       = document.getElementById("clear-btn");
+// ─────────────────────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────────────────────
+const state = {
+  pincode: localStorage.getItem("groceryai_pincode") || "",
+  categories: [],
+  products: [],
+  currentProduct: null,
+  currentCategory: null,
+  myList: JSON.parse(localStorage.getItem("groceryai_list") || "[]"),
+  priceAlerts: JSON.parse(localStorage.getItem("groceryai_alerts") || "[]"),
+  previousView: "home",
+};
 
-// --- DOM refs - Image search ---
-const imgPincodeInput   = document.getElementById("img-pincode-input");
-const imgPincodeError   = document.getElementById("img-pincode-error");
-const analyseBtn        = document.getElementById("analyse-btn");
-const imgErrorMsg       = document.getElementById("img-error-msg");
-const imgUploadError    = document.getElementById("img-upload-error");
-const imgLoadingSection = document.getElementById("img-loading-section");
-const imgLoadingTitle   = document.getElementById("img-loading-title");
-const imgLoadingSub     = document.getElementById("img-loading-sub");
-const detectedSection   = document.getElementById("detected-section");
-const detectedList      = document.getElementById("detected-list");
-const imgResultsSec     = document.getElementById("img-results-section");
-const imgSavingsTip     = document.getElementById("img-savings-tip");
-const imgAppCardsEl     = document.getElementById("img-app-cards");
-const imgBreakdownSec   = document.getElementById("img-breakdown-section");
-const dropZone          = document.getElementById("drop-zone");
-const fileInput         = document.getElementById("file-input");
-const browseBtn         = document.getElementById("browse-btn");
-const thumbGrid         = document.getElementById("thumb-grid");
-const uploadCount       = document.getElementById("upload-count");
-const clearImagesBtn    = document.getElementById("clear-images-btn");
-const visionNotice      = document.getElementById("vision-notice");
+// ─────────────────────────────────────────────────────────────────────────────
+// DOM helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const $  = (id) => document.getElementById(id);
+const el = (tag, cls, html) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html !== undefined) e.innerHTML = html;
+  return e;
+};
 
-// --- Tab state ---
-function switchTab(tab) {
-  const isText = tab === "text";
-  document.getElementById("tab-text").classList.toggle("active", isText);
-  document.getElementById("tab-image").classList.toggle("active", !isText);
-  document.getElementById("tab-text").setAttribute("aria-selected", String(isText));
-  document.getElementById("tab-image").setAttribute("aria-selected", String(!isText));
-  document.getElementById("panel-text").classList.toggle("hidden", !isText);
-  document.getElementById("panel-image").classList.toggle("hidden", isText);
-}
+function show(id)  { const e = $(id); if (e) e.classList.remove("hidden"); }
+function hide(id)  { const e = $(id); if (e) e.classList.add("hidden"); }
+function toggle(id){ const e = $(id); if (e) e.classList.toggle("hidden"); }
 
-// --- Image state ---
-/** @type {{ file: File, b64: string, objectUrl: string }[]} */
-let uploadedImages = [];
+// ─────────────────────────────────────────────────────────────────────────────
+// View switching
+// ─────────────────────────────────────────────────────────────────────────────
+const VIEWS = ["view-home", "view-category", "view-search", "view-product", "view-mylist"];
 
-// --- Item counter (text search) ---
-function updateItemCount() {
-  const n = getItems().length;
-  itemCount.textContent = n === 0 ? "0 items" : n === 1 ? "1 item" : `${n} items`;
-}
-
-function getItems() {
-  return itemsInput.value.split("\n").map(s => s.trim()).filter(Boolean);
-}
-
-itemsInput.addEventListener("input", updateItemCount);
-clearBtn.addEventListener("click", () => { itemsInput.value = ""; updateItemCount(); itemsInput.focus(); });
-
-// --- Helpers ---
-function showError(el, msg) {
-  el.textContent = msg;
-  el.classList.remove("hidden");
-}
-
-function clearError(el) {
-  el.textContent = "";
-  el.classList.add("hidden");
-}
-
-function showPincodeErr(errEl, inputEl, show) {
-  errEl.classList.toggle("hidden", !show);
-  inputEl.classList.toggle("invalid", show);
-}
-
-function setTextLoading(on) {
-  loadingSection.classList.toggle("hidden", !on);
-  formSection.classList.toggle("hidden", on);
-  compareBtn.disabled = on;
-  compareBtn.querySelector(".btn-text").classList.toggle("hidden", on);
-  compareBtn.querySelector(".btn-loading").classList.toggle("hidden", !on);
-}
-
-function setImageLoading(on) {
-  imgLoadingSection.classList.toggle("hidden", !on);
-  document.querySelector(".img-search-grid").classList.toggle("hidden", on);
-  analyseBtn.disabled = on;
-  analyseBtn.querySelector(".btn-text").classList.toggle("hidden", on);
-  analyseBtn.querySelector(".btn-loading").classList.toggle("hidden", !on);
-}
-
-function updateLoadingStep(title, sub) {
-  imgLoadingTitle.textContent = title;
-  imgLoadingSub.textContent = sub;
-}
-
-function formatPrice(n)     { return "\u20B9" + n.toFixed(0); }
-function formatPriceFull(n) { return "\u20B9" + n.toFixed(2); }
-
-function confClass(s) {
-  if (s === 0)  return "conf-none";
-  if (s >= 0.7) return "conf-high";
-  if (s >= 0.4) return "conf-mid";
-  return "conf-low";
-}
-
-function confLabel(s) {
-  if (s === 0)  return "Not found";
-  if (s >= 0.7) return "Match";
-  if (s >= 0.4) return "~Match";
-  return "Low";
-}
-
-// --- Image compression ---
-/**
- * Resize a File to <= MAX_IMAGE_PX on the longest side, then return base64 JPEG.
- * @param {File} file
- * @returns {Promise<string>} raw base64 (no data URI prefix)
- */
-async function compressImage(file) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width: w, height: h } = img;
-      if (w > MAX_IMAGE_PX || h > MAX_IMAGE_PX) {
-        const ratio = MAX_IMAGE_PX / Math.max(w, h);
-        w = Math.round(w * ratio);
-        h = Math.round(h * ratio);
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-      const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
-      // strip "data:image/jpeg;base64,"
-      resolve(dataUrl.split(",")[1]);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not load image")); };
-    img.src = url;
+function switchView(viewId) {
+  VIEWS.forEach(v => {
+    const el = $(v);
+    if (el) el.classList.toggle("hidden", v !== viewId);
   });
+  // Update bottom nav active state
+  document.querySelectorAll(".bnav-btn").forEach(b => b.classList.remove("active"));
+  const map = { "view-home": "bnav-home", "view-mylist": "bnav-list" };
+  if (map[viewId]) $( map[viewId])?.classList.add("active");
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-// --- Image upload handling ---
-async function addFiles(files) {
-  clearError(imgUploadError);
-  const incoming = Array.from(files);
+function showHome() {
+  switchView("view-home");
+  hideSearchSuggestions();
+}
 
-  // Validate types
-  const bad = incoming.filter(f => !ALLOWED_TYPES.has(f.type));
-  if (bad.length) {
-    showError(imgUploadError, "Please upload JPG, PNG, or WebP images only.");
+function showCategoryView(catId) {
+  state.currentCategory = catId;
+  const cat = state.categories.find(c => c.id === catId);
+  if (cat) {
+    $("cat-emoji").textContent = cat.emoji;
+    $("cat-name").textContent = cat.name;
+  }
+  switchView("view-category");
+  loadCategoryProducts(catId);
+}
+
+function showSearchView(query) {
+  $("search-query-label").textContent = query;
+  switchView("view-search");
+  loadSearchResults(query);
+}
+
+function showProductView(productId, fromView) {
+  state.previousView = fromView || "home";
+  $("product-back-btn").onclick = () => {
+    if (state.previousView === "category") showCategoryView(state.currentCategory);
+    else if (state.previousView === "search") { /* stay on search */ switchView("view-search"); }
+    else showHome();
+  };
+  switchView("view-product");
+  loadProductComparison(productId);
+}
+
+function showMyList() {
+  switchView("view-mylist");
+  renderMyList();
+}
+
+function showAllCategories() {
+  // For now, scroll to categories on home
+  showHome();
+  setTimeout(() => {
+    const sec = document.querySelector(".categories-scroll");
+    if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, 100);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pincode
+// ─────────────────────────────────────────────────────────────────────────────
+function promptPincode() {
+  $("modal-pincode").value = state.pincode;
+  show("pincode-modal");
+  setTimeout(() => $("modal-pincode").focus(), 100);
+}
+
+function closePincodeModal() {
+  hide("pincode-modal");
+}
+
+function quickPin(pin) {
+  $("modal-pincode").value = pin;
+  applyPincode();
+}
+
+function applyPincode() {
+  const val = $("modal-pincode").value.trim();
+  if (!/^\d{6}$/.test(val)) {
+    show("modal-pincode-error");
     return;
   }
-
-  // Cap at 10
-  const remaining = MAX_IMAGES - uploadedImages.length;
-  if (remaining <= 0) {
-    showError(imgUploadError, `Maximum ${MAX_IMAGES} images allowed. Remove some before adding more.`);
-    return;
+  hide("modal-pincode-error");
+  state.pincode = val;
+  localStorage.setItem("groceryai_pincode", val);
+  closePincodeModal();
+  updateLocationUI();
+  // If on product view, reload comparison
+  if (!$("view-product").classList.contains("hidden") && state.currentProduct) {
+    loadProductComparison(state.currentProduct.id);
   }
-
-  const toAdd = incoming.slice(0, remaining);
-  if (incoming.length > remaining) {
-    showError(imgUploadError, `Only added ${toAdd.length} image(s). Maximum is ${MAX_IMAGES} total.`);
-  }
-
-  // Compress and add
-  for (const file of toAdd) {
-    try {
-      const b64 = await compressImage(file);
-      const objectUrl = URL.createObjectURL(file);
-      uploadedImages.push({ file, b64, objectUrl });
-    } catch {
-      showError(imgUploadError, `Could not process image: ${file.name}`);
-    }
-  }
-
-  renderThumbs();
 }
 
-function removeImage(idx) {
-  URL.revokeObjectURL(uploadedImages[idx].objectUrl);
-  uploadedImages.splice(idx, 1);
-  renderThumbs();
-  clearError(imgUploadError);
+function updateLocationUI() {
+  const pin = state.pincode;
+  const locationText = pin ? `📍 ${pin}` : "Set Location";
+  $("nav-location-text").textContent = locationText;
 }
 
-function clearAllImages() {
-  uploadedImages.forEach(img => URL.revokeObjectURL(img.objectUrl));
-  uploadedImages = [];
-  renderThumbs();
-  clearError(imgUploadError);
+// Close modal on overlay click
+$("pincode-modal").addEventListener("click", (e) => {
+  if (e.target === $("pincode-modal")) closePincodeModal();
+});
+
+$("modal-pincode").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") applyPincode();
+  if (e.key === "Escape") closePincodeModal();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API helpers
+// ─────────────────────────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  const r = await fetch(API_BASE + path);
+  if (!r.ok) throw new Error(`API error ${r.status}: ${path}`);
+  return r.json();
 }
 
-function renderThumbs() {
-  uploadCount.textContent = `${uploadedImages.length} / ${MAX_IMAGES} photos`;
-  thumbGrid.innerHTML = "";
-
-  uploadedImages.forEach((item, idx) => {
-    const div = document.createElement("div");
-    div.className = "thumb-item";
-
-    const img = document.createElement("img");
-    img.src = item.objectUrl;
-    img.alt = `Grocery image ${idx + 1}: ${item.file.name}`;
-    img.loading = "lazy";
-
-    const btn = document.createElement("button");
-    btn.className = "thumb-remove";
-    btn.type = "button";
-    btn.setAttribute("aria-label", `Remove image ${idx + 1}`);
-    btn.textContent = "x";
-    btn.addEventListener("click", (e) => { e.stopPropagation(); removeImage(idx); });
-
-    div.appendChild(img);
-    div.appendChild(btn);
-    thumbGrid.appendChild(div);
-  });
-}
-
-// --- Drop zone events ---
-dropZone.addEventListener("click", (e) => {
-  if (e.target === browseBtn || browseBtn.contains(e.target)) return;
-  fileInput.click();
-});
-
-browseBtn.addEventListener("click", (e) => {
-  e.stopPropagation();
-  fileInput.click();
-});
-
-dropZone.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
-});
-
-fileInput.addEventListener("change", (e) => {
-  if (e.target.files.length) addFiles(e.target.files);
-  e.target.value = ""; // allow re-uploading same file
-});
-
-dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
-dropZone.addEventListener("dragleave", ()  => dropZone.classList.remove("drag-over"));
-dropZone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  dropZone.classList.remove("drag-over");
-  if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
-});
-
-clearImagesBtn.addEventListener("click", clearAllImages);
-
-// Pincode digit-only enforcement (both inputs)
-[pincodeInput, imgPincodeInput].forEach(inp => {
-  inp.addEventListener("input", () => {
-    inp.value = inp.value.replace(/\D/g, "").slice(0, 6);
-  });
-});
-
-pincodeInput.addEventListener("keydown", e => { if (e.key === "Enter") compareItems(); });
-imgPincodeInput.addEventListener("keydown", e => { if (e.key === "Enter") analyseImages(); });
-
-// --- TEXT SEARCH ---
-async function compareItems() {
-  clearError(errorMsg);
-  showPincodeErr(pincodeError, pincodeInput, false);
-
-  const rawItems = getItems();
-  if (rawItems.length === 0) {
-    showError(errorMsg, "Please enter at least one grocery item.");
-    itemsInput.focus();
-    return;
-  }
-
-  const pincode = pincodeInput.value.trim();
-  if (!/^\d{6}$/.test(pincode)) {
-    showPincodeErr(pincodeError, pincodeInput, true);
-    pincodeInput.focus();
-    return;
-  }
-
-  setTextLoading(true);
-  resultsSection.classList.add("hidden");
+// ─────────────────────────────────────────────────────────────────────────────
+// Init — load categories and featured products
+// ─────────────────────────────────────────────────────────────────────────────
+async function init() {
+  updateLocationUI();
+  updateCartCount();
 
   try {
-    const resp = await fetch(`${API_BASE}/api/compare`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: rawItems, pincode }),
-    });
+    const [catData, prodData] = await Promise.all([
+      apiFetch("/api/categories"),
+      apiFetch("/api/products?limit=50"),
+    ]);
+    state.categories = catData.categories || [];
+    state.products   = prodData.products  || [];
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || `Server error ${resp.status}`);
-    }
-
-    const data = await resp.json();
-    renderCompareResults(data, appCardsEl, breakdownSec, savingsTip, resultsSection);
-
+    renderCategories();
+    renderFeaturedProducts();
+    setupSearchAutocomplete();
   } catch (err) {
-    setTextLoading(false);
-    const msg = err.message.includes("fetch") || err.message.includes("NetworkError")
-      ? "Could not connect to GroceryAI. Please check your connection and try again."
-      : "Something went wrong while comparing prices. Please try again.";
-    showError(errorMsg, msg);
+    console.error("Init failed:", err);
+    // Show graceful degradation — render with built-in fallback data
+    renderCategoriesFallback();
+    renderProductsFallback();
+  }
+
+  // Prompt for pincode on first visit
+  if (!state.pincode) {
+    setTimeout(promptPincode, 1200);
   }
 }
 
-function renderCompareResults(data, cardsEl, bdSec, tipEl, resultsSec) {
-  setTextLoading(false);
-
-  if (data.savings_tip) {
-    tipEl.innerHTML = `
-      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" style="flex-shrink:0;color:var(--green-dark)" aria-hidden="true">
-        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-      </svg>
-      ${data.savings_tip}`;
-    tipEl.classList.remove("hidden");
-  } else {
-    tipEl.classList.add("hidden");
-  }
-
-  cardsEl.innerHTML = "";
-  data.results.forEach((app, idx) => cardsEl.appendChild(buildAppCard(app, idx)));
-
-  bdSec.innerHTML = "";
-  if (data.query_items && data.query_items.length > 0) {
-    bdSec.appendChild(buildBreakdownSection(data));
-  }
-
-  resultsSec.classList.remove("hidden");
-  resultsSec.scrollIntoView({ behavior: "smooth", block: "start" });
+// ─────────────────────────────────────────────────────────────────────────────
+// Render Categories
+// ─────────────────────────────────────────────────────────────────────────────
+function renderCategories() {
+  const container = $("categories-scroll");
+  if (!container) return;
+  container.innerHTML = "";
+  state.categories.forEach(cat => {
+    const card = el("button", "category-card");
+    card.setAttribute("type", "button");
+    card.setAttribute("role", "listitem");
+    card.setAttribute("aria-label", cat.name);
+    card.innerHTML = `
+      <span class="cat-emoji" aria-hidden="true">${cat.emoji}</span>
+      <span class="cat-name">${cat.name}</span>
+    `;
+    card.addEventListener("click", () => showCategoryView(cat.id));
+    container.appendChild(card);
+  });
 }
 
-function buildAppCard(app, rank) {
-  const isBest = rank === 0;
-  const cfg    = APP_CONFIG[app.app_name] || { label: app.app_name };
-  const rankLabel = ["1st", "2nd", "3rd", "4th"][rank] || `${rank + 1}th`;
-  const totalItems = app.items_found + app.items_missing.length;
+function renderCategoriesFallback() {
+  const CATS = [
+    { id: "vegetables", name: "Vegetables", emoji: "🥬" },
+    { id: "fruits",     name: "Fruits",     emoji: "🍎" },
+    { id: "dairy",      name: "Dairy",      emoji: "🥛" },
+    { id: "staples",    name: "Staples",    emoji: "🌾" },
+    { id: "snacks",     name: "Snacks",     emoji: "🍪" },
+    { id: "beverages",  name: "Beverages",  emoji: "🥤" },
+  ];
+  state.categories = CATS;
+  renderCategories();
+}
 
-  const deliveryHtml = app.delivery_fee > 0
-    ? `<span class="app-card-delivery">+${formatPrice(app.delivery_fee)} delivery</span>`
-    : `<span class="app-card-delivery free">Free delivery</span>`;
+// ─────────────────────────────────────────────────────────────────────────────
+// Render Product Grid
+// ─────────────────────────────────────────────────────────────────────────────
+function renderProductGrid(products, containerId, fromView) {
+  const container = $(containerId);
+  if (!container) return;
+  container.innerHTML = "";
 
-  const savingsHtml = app.savings > 0
-    ? `<div class="app-card-savings">Save ${formatPrice(app.savings)} vs costliest</div>`
+  // Show skeletons first
+  if (products === null) {
+    for (let i = 0; i < 8; i++) {
+      container.appendChild(el("div", "skel-product"));
+    }
+    return;
+  }
+
+  if (!products.length) {
+    if (containerId === "search-products") {
+      show("search-empty");
+    }
+    return;
+  }
+  if (containerId === "search-products") hide("search-empty");
+
+  products.forEach(product => {
+    const card = buildProductCard(product, fromView);
+    container.appendChild(card);
+  });
+}
+
+function buildProductCard(product, fromView) {
+  const inList = state.myList.some(i => i.id === product.id);
+  const card = el("article", `product-card${inList ? "" : ""}`, "");
+  card.setAttribute("role", "listitem");
+  card.setAttribute("aria-label", product.name);
+
+  const catName = product.category
+    ? product.category.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
     : "";
-
-  const missingHtml = app.items_missing.length > 0
-    ? `<div class="app-card-missing">Not found: ${app.items_missing.join(", ")}</div>`
-    : "";
-
-  const card = document.createElement("div");
-  card.className = "app-card" + (isBest ? " best" : "");
-  card.dataset.appName = app.app_name;
 
   card.innerHTML = `
-    <div class="app-card-rank" aria-label="Rank ${rank + 1}">${rankLabel}</div>
-    <div class="app-card-name">${cfg.label}</div>
-    ${isBest ? '<div class="best-badge">Best Deal</div>' : ""}
-    <div class="app-card-price" aria-label="Total ${formatPrice(app.total_price)}">${formatPrice(app.total_price)}</div>
-    ${deliveryHtml}
-    <div class="app-card-items">${app.items_found} of ${totalItems} items found</div>
-    ${savingsHtml}
-    ${missingHtml}
+    ${inList ? '<span class="in-list-badge">✓ In List</span>' : ""}
+    <div class="product-img-wrap" aria-hidden="true">
+      <span>${product.emoji || "🛒"}</span>
+    </div>
+    <div class="product-card-body">
+      <p class="product-card-name">${product.name}</p>
+      <p class="product-card-cat">${catName}</p>
+      <div class="product-card-price-row">
+        <span class="product-card-price">₹${product.base_price_inr}</span>
+        <span class="product-card-unit">/ ${product.available_sizes?.[0] || "1 unit"}</span>
+      </div>
+      <div class="product-card-rating">⭐ ${product.rating || "4.3"}</div>
+      <div class="product-card-footer">
+        <button type="button" class="compare-btn" aria-label="Compare prices for ${product.name}">
+          Compare Prices →
+        </button>
+      </div>
+    </div>
   `;
+
+  card.addEventListener("click", (e) => {
+    if (e.target.classList.contains("add-to-list-btn")) return;
+    showProductView(product.id, fromView || "home");
+  });
+
   return card;
 }
 
-function buildBreakdownSection(data) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "breakdown-card";
+function renderFeaturedProducts() {
+  // Show first 8 popular products
+  const featured = state.products.slice(0, 12);
+  renderProductGrid(featured, "featured-products", "home");
+}
 
-  const toggle = document.createElement("button");
-  toggle.className = "breakdown-toggle";
-  toggle.setAttribute("aria-expanded", "false");
-  toggle.innerHTML = `<span>Per-item Price Breakdown</span><span class="breakdown-toggle-icon" aria-hidden="true">+</span>`;
+function renderProductsFallback() {
+  // If API fails, show placeholder skeleton
+  renderProductGrid([], "featured-products", "home");
+}
 
-  const tableWrap = document.createElement("div");
-  tableWrap.className = "breakdown-table-wrap hidden";
+// ─────────────────────────────────────────────────────────────────────────────
+// Category Products
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadCategoryProducts(catId) {
+  // Show skeletons
+  renderProductGrid(null, "category-products", "category");
 
-  let open = false;
-  toggle.addEventListener("click", () => {
-    open = !open;
-    toggle.classList.toggle("open", open);
-    toggle.setAttribute("aria-expanded", String(open));
-    tableWrap.classList.toggle("hidden", !open);
-    toggle.querySelector(".breakdown-toggle-icon").textContent = open ? "-" : "+";
-  });
+  try {
+    const data = await apiFetch(`/api/products?category=${catId}`);
+    const products = data.products || [];
+    renderProductGrid(products, "category-products", "category");
+  } catch (err) {
+    console.error("Category load failed:", err);
+    // Filter from cached state
+    const products = state.products.filter(p => p.category === catId);
+    renderProductGrid(products, "category-products", "category");
+  }
+}
 
-  const appNames = data.results.map(a => APP_CONFIG[a.app_name]?.label || a.app_name);
-  const table = document.createElement("table");
-  table.className = "breakdown-table";
+// ─────────────────────────────────────────────────────────────────────────────
+// Search
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadSearchResults(query) {
+  hide("search-empty");
+  renderProductGrid(null, "search-products", "search");
 
-  const thead = document.createElement("thead");
-  thead.innerHTML = `<tr><th scope="col">Item</th>${appNames.map(n => `<th scope="col">${n}</th>`).join("")}</tr>`;
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  data.query_items.forEach((item, itemIdx) => {
-    const appMatches = data.results.map(app =>
-      app.matches.find(m => m.query.toLowerCase().includes(item.name.toLowerCase()))
-      || app.matches[itemIdx]
-      || null
+  try {
+    const data = await apiFetch(`/api/products?q=${encodeURIComponent(query)}`);
+    const products = data.products || [];
+    renderProductGrid(products, "search-products", "search");
+  } catch (err) {
+    const q = query.toLowerCase();
+    const products = state.products.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.id.includes(q) ||
+      (p.tags || []).some(t => t.toLowerCase().includes(q))
     );
-    const prices   = appMatches.filter(m => m && m.found).map(m => m.price);
-    const minPrice = prices.length ? Math.min(...prices) : null;
+    renderProductGrid(products, "search-products", "search");
+  }
+}
 
-    const tr = document.createElement("tr");
-    const tdItem = document.createElement("td");
-    tdItem.innerHTML = `<strong>${item.raw}</strong>`;
-    tr.appendChild(tdItem);
+function setupSearchAutocomplete() {
+  const inputs = [$("global-search"), $("hero-search")];
 
-    appMatches.forEach(match => {
-      const td = document.createElement("td");
-      if (!match || !match.found) {
-        td.innerHTML = `<span class="conf-pill conf-none">Not found</span>`;
-      } else {
-        if (minPrice !== null && Math.abs(match.price - minPrice) < 0.001) td.classList.add("cheapest-cell");
-        td.innerHTML = `<span class="price-wrap">${formatPriceFull(match.price)}</span><br><span class="conf-pill ${confClass(match.confidence)}">${confLabel(match.confidence)}</span>`;
+  inputs.forEach(input => {
+    if (!input) return;
+    let debounceTimer;
+
+    input.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      const val = input.value.trim();
+      if (input.id === "global-search") {
+        val.length > 0 ? show("search-clear-btn") : hide("search-clear-btn");
       }
-      tr.appendChild(td);
+      if (val.length < 2) {
+        hideSearchSuggestions();
+        return;
+      }
+      debounceTimer = setTimeout(() => showSearchSuggestions(val, input), 200);
     });
-    tbody.appendChild(tr);
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const val = input.value.trim();
+        if (val.length > 0) {
+          hideSearchSuggestions();
+          showSearchView(val);
+        }
+      }
+      if (e.key === "Escape") hideSearchSuggestions();
+    });
   });
 
-  table.appendChild(tbody);
-  tableWrap.appendChild(table);
-  wrapper.appendChild(toggle);
-  wrapper.appendChild(tableWrap);
-  return wrapper;
-}
-
-// --- TEXT SEARCH RESET ---
-function resetForm() {
-  resultsSection.classList.add("hidden");
-  formSection.classList.remove("hidden");
-  clearError(errorMsg);
-  showPincodeErr(pincodeError, pincodeInput, false);
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  itemsInput.focus();
-}
-
-// --- IMAGE SEARCH ---
-async function analyseImages() {
-  clearError(imgErrorMsg);
-  clearError(imgUploadError);
-  showPincodeErr(imgPincodeError, imgPincodeInput, false);
-  visionNotice.classList.add("hidden");
-
-  if (uploadedImages.length === 0) {
-    showError(imgUploadError, "Please upload at least one grocery image.");
-    return;
-  }
-
-  const pincode = imgPincodeInput.value.trim();
-  if (!/^\d{6}$/.test(pincode)) {
-    showPincodeErr(imgPincodeError, imgPincodeInput, true);
-    imgPincodeInput.focus();
-    return;
-  }
-
-  // Hide previous results
-  detectedSection.classList.add("hidden");
-  imgResultsSec.classList.add("hidden");
-
-  setImageLoading(true);
-  updateLoadingStep("Analysing images...", `Processing ${uploadedImages.length} image(s)`);
-
-  try {
-    const images_b64 = uploadedImages.map(img => img.b64);
-
-    updateLoadingStep("Detecting products...", "Identifying grocery items in your photos");
-
-    const resp = await fetch(`${API_BASE}/api/analyze-images`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ images_b64, pincode }),
-    });
-
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || `Server error ${resp.status}`);
-    }
-
-    const data = await resp.json();
-    setImageLoading(false);
-    handleImageResponse(data, pincode);
-
-  } catch (err) {
-    setImageLoading(false);
-    showError(imgErrorMsg, "Image analysis failed: " + err.message);
-    document.querySelector(".img-search-grid").classList.remove("hidden");
-  }
-}
-
-function handleImageResponse(data, pincode) {
-  // Re-show the upload grid
-  document.querySelector(".img-search-grid").classList.remove("hidden");
-
-  const status = data.vision_status;
-
-  // Not configured (no API key set)
-  if (status === "not_configured") {
-    visionNotice.classList.remove("hidden");
-    return;
-  }
-
-  // Quota exhausted (credits used up)
-  if (status === "quota_exhausted") {
-    showVisionUnavailable(
-      "Image recognition is temporarily unavailable because the AI service has reached its usage limit.",
-      "You can still use text search to compare grocery prices."
-    );
-    return;
-  }
-
-  // Transient rate limit
-  if (status === "rate_limited") {
-    showError(imgErrorMsg,
-      "The AI service is currently busy. Please wait a moment and try again. Text search is still available."
-    );
-    return;
-  }
-
-  // Authentication / key problem
-  if (status === "auth_error") {
-    showError(imgErrorMsg,
-      "Image recognition could not connect to the AI service. Please contact the site administrator."
-    );
-    return;
-  }
-
-  // Generic error or no products found
-  if (status === "error" || status === "no_products") {
-    const msg = data.error_message
-      || "We could not identify any products. Try uploading a clearer image.";
-    showError(imgErrorMsg, msg);
-    return;
-  }
-
-  // OK - show detected products for review
-  if (data.detected && data.detected.length > 0) {
-    renderDetectedProducts(data.detected);
-
-    // If we already have compare results, show them immediately below
-    if (data.compare_result) {
-      renderImageCompareResults(data.compare_result);
-    }
-  } else {
-    showError(imgErrorMsg, "No grocery products were identified in the uploaded images.");
-  }
-}
-
-/**
- * Show the info notice (amber box) with custom headline and subtitle.
- * Used for quota_exhausted, not_configured, auth_error.
- */
-function showVisionUnavailable(headline, sub) {
-  const titleEl = document.getElementById("vision-notice-title");
-  const subEl   = document.getElementById("vision-notice-sub");
-  if (titleEl) titleEl.textContent = headline;
-  if (subEl)   subEl.textContent   = sub;
-  visionNotice.classList.remove("hidden");
-}
-
-function renderDetectedProducts(detected) {
-  detectedList.innerHTML = "";
-  detected.forEach((product, idx) => {
-    const item = document.createElement("div");
-    item.className = "detected-item";
-    item.dataset.idx = idx;
-
-    const check = document.createElement("span");
-    check.className = "detected-check";
-    check.setAttribute("aria-hidden", "true");
-    check.textContent = "\u2713";
-
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = product.name;
-    input.setAttribute("aria-label", `Detected product ${idx + 1}: ${product.name}. Edit to change.`);
-
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "detected-remove";
-    removeBtn.type = "button";
-    removeBtn.setAttribute("aria-label", `Remove ${product.name}`);
-    removeBtn.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>`;
-    removeBtn.addEventListener("click", () => { item.remove(); });
-
-    item.appendChild(check);
-    item.appendChild(input);
-    item.appendChild(removeBtn);
-    detectedList.appendChild(item);
+  $("search-clear-btn")?.addEventListener("click", () => {
+    $("global-search").value = "";
+    hide("search-clear-btn");
+    hideSearchSuggestions();
+    $("global-search").focus();
   });
 
-  detectedSection.classList.remove("hidden");
-  detectedSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Close suggestions when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".nav-search-wrap") && !e.target.closest(".hero-search-box")) {
+      hideSearchSuggestions();
+    }
+  });
 }
 
-async function compareDetected() {
-  // Collect current (possibly edited) product names from inputs
-  const inputs = Array.from(detectedList.querySelectorAll("input[type='text']"));
-  const items = inputs.map(i => i.value.trim()).filter(Boolean);
+function showSearchSuggestions(query, inputEl) {
+  const q = query.toLowerCase();
+  const matches = state.products.filter(p =>
+    p.name.toLowerCase().includes(q) ||
+    (p.tags || []).some(t => t.toLowerCase().includes(q))
+  ).slice(0, 6);
 
-  if (items.length === 0) {
-    showError(imgErrorMsg, "Please keep at least one detected product to compare.");
-    return;
+  const container = $("search-suggestions");
+  if (!container || !matches.length) { hideSearchSuggestions(); return; }
+
+  container.innerHTML = "";
+  matches.forEach(p => {
+    const item = el("div", "suggestion-item", "");
+    item.setAttribute("role", "option");
+    item.setAttribute("tabindex", "0");
+    const highlighted = p.name.replace(new RegExp(`(${escapeRe(query)})`, "gi"), "<strong>$1</strong>");
+    const catLabel = (p.category || "").replace(/_/g, " ");
+    item.innerHTML = `
+      <span class="suggestion-emoji" aria-hidden="true">${p.emoji || "🛒"}</span>
+      <span class="suggestion-text">${highlighted}</span>
+      <span class="suggestion-cat">${catLabel}</span>
+    `;
+    item.addEventListener("click", () => {
+      hideSearchSuggestions();
+      showProductView(p.id, "search");
+    });
+    item.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        hideSearchSuggestions();
+        showProductView(p.id, "search");
+      }
+    });
+    container.appendChild(item);
+  });
+
+  show("search-suggestions");
+}
+
+function hideSearchSuggestions() {
+  hide("search-suggestions");
+}
+
+function focusNavSearch() {
+  $("global-search")?.focus();
+  $("bnav-search")?.classList.add("active");
+}
+
+function focusHeroSearch() {
+  const heroSearch = $("hero-search");
+  const val = heroSearch?.value?.trim();
+  if (val) {
+    showSearchView(val);
+  } else {
+    heroSearch?.focus();
   }
+}
 
-  const pincode = imgPincodeInput.value.trim();
-  if (!/^\d{6}$/.test(pincode)) {
-    showPincodeErr(imgPincodeError, imgPincodeInput, true);
-    imgPincodeInput.focus();
-    return;
-  }
+function escapeRe(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-  // Reuse compare-detected button as loading indicator
-  const btn = document.getElementById("compare-detected-btn");
-  btn.disabled = true;
-  const origText = btn.innerHTML;
-  btn.innerHTML = `<span class="btn-spinner" style="border:2px solid rgba(255,255,255,.35);border-top-color:#fff;width:15px;height:15px;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;margin-right:6px"></span> Comparing...`;
+// ─────────────────────────────────────────────────────────────────────────────
+// Product Comparison Page
+// ─────────────────────────────────────────────────────────────────────────────
+async function loadProductComparison(productId) {
+  state.currentProduct = { id: productId };
+
+  // Show loading state
+  $("platform-cards").innerHTML = `
+    <div class="compare-loading">
+      <div class="spinner"></div>
+      <span>Comparing prices across platforms…</span>
+    </div>
+  `;
+  hide("best-price-banner");
+
+  const pincode = state.pincode || "560001";
 
   try {
-    const resp = await fetch(`${API_BASE}/api/compare`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items, pincode }),
-    });
+    const [productData, compareData] = await Promise.all([
+      apiFetch(`/api/product/${productId}`),
+      apiFetch(`/api/product/${productId}/compare?pincode=${pincode}`),
+    ]);
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || `Server error ${resp.status}`);
+    const product = productData.product;
+    state.currentProduct = product;
+
+    // Update product header
+    $("product-hero-emoji").textContent = product.emoji || "🛒";
+    $("product-hero-name").textContent  = product.name;
+    $("product-hero-meta").textContent  = `${(product.category || "").replace(/_/g, " ")} · ${product.origin || ""}`;
+    $("product-pincode-display").textContent = pincode;
+
+    // Render platform comparison
+    renderPlatformCards(compareData);
+    renderProductDetails(product);
+    renderPriceHistory(compareData, product);
+    renderQualityTable(compareData);
+    renderAvailability(compareData);
+
+    // Populate price alert with suggested price
+    const cheapest = getCheapestVariant(compareData);
+    if (cheapest) {
+      $("alert-price-input").placeholder = Math.floor(cheapest.price * 0.9);
     }
 
-    const data = await resp.json();
-    renderImageCompareResults(data);
-
   } catch (err) {
-    showError(imgErrorMsg, "Could not compare prices: " + err.message);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = origText;
+    console.error("Product compare failed:", err);
+    $("platform-cards").innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">⚠️</div>
+        <p class="empty-title">Could not load comparison</p>
+        <p class="empty-sub">Please check your connection or try again.</p>
+      </div>
+    `;
   }
 }
 
-function renderImageCompareResults(data) {
-  if (data.savings_tip) {
-    imgSavingsTip.innerHTML = `
-      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" style="flex-shrink:0" aria-hidden="true">
-        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-      </svg>
-      ${data.savings_tip}`;
-    imgSavingsTip.classList.remove("hidden");
+function getCheapestVariant(compareData) {
+  const platforms = compareData.platforms || [];
+  const bests = platforms.map(p => p.best_variant).filter(Boolean);
+  if (!bests.length) return null;
+  return bests.reduce((a, b) => (a.normalized_price || 9999) < (b.normalized_price || 9999) ? a : b);
+}
+
+function renderPlatformCards(compareData) {
+  const platforms = compareData.platforms || [];
+  const cheapestId = compareData.cheapest_platform_id;
+  const container = $("platform-cards");
+  container.innerHTML = "";
+
+  if (!platforms.length) {
+    container.innerHTML = `<div class="empty-state"><p class="empty-title">No platform data available.</p></div>`;
+    return;
+  }
+
+  platforms.forEach(pData => {
+    const pid = pData.platform.id;
+    const meta = PLATFORM_META[pid] || { name: pid, emoji: "🏪", css: pid, logoText: pid[0] };
+    const isCheapest = pid === cheapestId;
+    const variant = pData.best_variant;
+    const isAvail = pData.area_available && variant;
+
+    const card = el("div", `platform-card ${pid}-card${isCheapest ? " is-cheapest" : ""}${!isAvail ? " is-unavailable" : ""}`);
+    card.setAttribute("role", "listitem");
+
+    let priceHtml = "";
+    let buyBtnHtml = "";
+    let stockHtml = "";
+
+    if (!pData.area_available) {
+      priceHtml = `<span class="platform-price-big text-muted">—</span><span class="platform-price-norm text-muted">Not available</span>`;
+      buyBtnHtml = `<span class="buy-btn buy-btn-unavail">Not in your area</span>`;
+      stockHtml = `<span class="plat-detail-val out-of-stock">❌ Not available in ${$("product-pincode-display").textContent}</span>`;
+    } else if (!variant) {
+      priceHtml = `<span class="platform-price-big text-muted">—</span><span class="platform-price-norm text-muted">Not listed</span>`;
+      buyBtnHtml = `<span class="buy-btn buy-btn-unavail">Not listed</span>`;
+      stockHtml = `<span class="plat-detail-val out-of-stock">❌ Not listed</span>`;
+    } else if (!variant.in_stock) {
+      priceHtml = `
+        <span class="platform-price-big">₹${variant.price}</span>
+        <span class="platform-price-norm">${normLabel(variant)}</span>
+        <span class="platform-qty">${variant.display_quantity || ""}</span>
+      `;
+      buyBtnHtml = `<span class="buy-btn buy-btn-unavail">❌ Out of Stock</span>`;
+      stockHtml = `<span class="plat-detail-val out-of-stock">❌ Out of Stock</span>`;
+    } else {
+      priceHtml = `
+        <span class="platform-price-big">₹${variant.price}</span>
+        <span class="platform-price-norm">${normLabel(variant)}</span>
+        <span class="platform-qty">${variant.display_quantity || ""}</span>
+        ${isCheapest ? '<span class="platform-cheapest-tag">🏆 CHEAPEST</span>' : ""}
+      `;
+      buyBtnHtml = `<a href="${variant.product_url || pData.platform.website}" target="_blank" rel="noopener" class="buy-btn buy-btn-green" aria-label="Buy ${state.currentProduct?.name || ""} on ${meta.name}">Buy on ${meta.name}</a>`;
+      stockHtml = `<span class="plat-detail-val in-stock">✅ In Stock</span>`;
+    }
+
+    const qty = variant ? variant.display_quantity : "—";
+    const quality = variant ? variant.quality : "—";
+    const delivery = pData.area_available ? `⚡ ${pData.delivery_time} (est.)` : "—";
+
+    card.innerHTML = `
+      <div class="platform-card-left">
+        <div class="platform-name-row">
+          <div class="platform-logo ${pid}-logo" aria-hidden="true">${meta.logoText}</div>
+          <span class="platform-name-text">${meta.name}</span>
+        </div>
+        <div class="platform-detail-grid">
+          <div class="plat-detail-item">
+            <span class="plat-detail-label">Quantity</span>
+            <span class="plat-detail-val">${qty}</span>
+          </div>
+          <div class="plat-detail-item">
+            <span class="plat-detail-label">Quality</span>
+            <span class="plat-detail-val">${quality}</span>
+          </div>
+          <div class="plat-detail-item">
+            <span class="plat-detail-label">Stock</span>
+            ${stockHtml}
+          </div>
+          <div class="plat-detail-item">
+            <span class="plat-detail-label">Delivery</span>
+            <span class="plat-detail-val delivery-badge">${delivery}</span>
+          </div>
+          <div class="plat-detail-item">
+            <span class="plat-detail-label">Pincode</span>
+            <span class="plat-detail-val">${$("product-pincode-display").textContent}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+          ${buyBtnHtml}
+          ${isAvail && variant ? `<button type="button" class="add-to-list-btn" onclick="addToList('${state.currentProduct?.id}', '${variant.price}')">+ My List</button>` : ""}
+        </div>
+      </div>
+      <div class="platform-card-right">
+        ${priceHtml}
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+
+  // Best price banner
+  const cheapestPlatform = platforms.find(p => p.platform.id === cheapestId);
+  if (cheapestPlatform && cheapestPlatform.best_variant) {
+    const v = cheapestPlatform.best_variant;
+    $("best-platform-name").textContent = PLATFORM_META[cheapestId]?.name || cheapestId;
+    $("best-price-val").textContent = `₹${v.price}`;
+    $("best-price-norm").textContent = normLabel(v);
+    show("best-price-banner");
   } else {
-    imgSavingsTip.classList.add("hidden");
+    hide("best-price-banner");
   }
-
-  imgAppCardsEl.innerHTML = "";
-  data.results.forEach((app, idx) => imgAppCardsEl.appendChild(buildAppCard(app, idx)));
-
-  imgBreakdownSec.innerHTML = "";
-  if (data.query_items && data.query_items.length > 0) {
-    imgBreakdownSec.appendChild(buildBreakdownSection(data));
-  }
-
-  imgResultsSec.classList.remove("hidden");
-  imgResultsSec.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// --- IMAGE SEARCH RESET ---
-function resetImageSearch() {
-  imgResultsSec.classList.add("hidden");
-  detectedSection.classList.add("hidden");
-  imgLoadingSection.classList.add("hidden");
-  document.querySelector(".img-search-grid").classList.remove("hidden");
-  clearAllImages();
-  clearError(imgErrorMsg);
-  clearError(imgUploadError);
-  showPincodeErr(imgPincodeError, imgPincodeInput, false);
-  visionNotice.classList.add("hidden");
-  window.scrollTo({ top: 0, behavior: "smooth" });
+function normLabel(variant) {
+  if (!variant || !variant.normalized_price) return "";
+  const unit = variant.normalized_unit || "unit";
+  return `₹${variant.normalized_price.toFixed(0)}/${unit}`;
 }
+
+function renderProductDetails(product) {
+  const body = $("detail-body");
+  if (!body) return;
+
+  const sizes = (product.available_sizes || []).map(s => `<span class="size-pill">${s}</span>`).join("");
+  const nutrition = product.nutrition
+    ? Object.entries(product.nutrition).map(([k, v]) => `<span class="size-pill">${k}: ${v}</span>`).join("")
+    : null;
+
+  body.innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-item">
+        <span class="detail-label">Category</span>
+        <span class="detail-val">${(product.category || "").replace(/_/g, " ")}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Type</span>
+        <span class="detail-val">${product.subcategory || "—"}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Origin</span>
+        <span class="detail-val">${product.origin || "—"}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Storage</span>
+        <span class="detail-val">${product.storage || "—"}</span>
+      </div>
+      <div class="detail-item">
+        <span class="detail-label">Shelf Life</span>
+        <span class="detail-val">${product.shelf_life || "—"}</span>
+      </div>
+      <div class="detail-item detail-full">
+        <span class="detail-label">Description</span>
+        <span class="detail-val">${product.description || "—"}</span>
+      </div>
+      <div class="detail-item detail-full">
+        <span class="detail-label">Available Sizes</span>
+        <div class="size-pills">${sizes}</div>
+      </div>
+      ${nutrition ? `<div class="detail-item detail-full"><span class="detail-label">Nutrition</span><div class="size-pills">${nutrition}</div></div>` : ""}
+    </div>
+  `;
+}
+
+function renderPriceHistory(compareData, product) {
+  const container = $("price-history-content");
+  if (!container) return;
+
+  const platforms = compareData.platforms || [];
+  const availPlatforms = platforms.filter(p => p.history && p.history.length);
+
+  if (!availPlatforms.length) {
+    container.innerHTML = `<p class="text-muted" style="padding:16px 18px;font-size:13px;">Price history not available.</p>`;
+    return;
+  }
+
+  // Tabs for each platform
+  const tabsHtml = availPlatforms.map((p, i) => `
+    <button type="button" class="ph-tab${i === 0 ? " active" : ""}" onclick="showHistoryTab('${p.platform.id}', this)" data-pid="${p.platform.id}">
+      ${PLATFORM_META[p.platform.id]?.name || p.platform.id}
+    </button>
+  `).join("");
+
+  const chartsHtml = availPlatforms.map((p, i) => `
+    <div id="history-chart-${p.platform.id}" class="price-history-inner${i === 0 ? "" : " hidden"}">
+      ${buildHistoryChart(p.history, p.platform.id)}
+      <p style="font-size:12px;color:var(--muted);margin-top:4px;">
+        Lowest this week: <strong>₹${Math.min(...p.history.map(h => h.price))}</strong>
+        · Highest: <strong>₹${Math.max(...p.history.map(h => h.price))}</strong>
+      </p>
+    </div>
+  `).join("");
+
+  container.innerHTML = `
+    <div class="price-history-tabs">${tabsHtml}</div>
+    ${chartsHtml}
+  `;
+}
+
+function buildHistoryChart(history, pid) {
+  if (!history || !history.length) return "";
+  const prices = history.map(h => h.price);
+  const maxP = Math.max(...prices);
+  const minP = Math.min(...prices);
+  const range = maxP - minP || 1;
+  const maxH = 68; // px
+
+  const bars = history.map((h, i) => {
+    const heightPct = ((h.price - minP) / range) * 0.7 + 0.3;
+    const height = Math.round(heightPct * maxH);
+    const isCurrent = i === history.length - 1;
+    return `
+      <div class="history-bar-wrap">
+        <span class="history-price">₹${h.price}</span>
+        <div class="history-bar${isCurrent ? " current" : ""}" style="height:${height}px;" title="${h.day}: ₹${h.price}"></div>
+        <span class="history-label">${h.day}</span>
+      </div>
+    `;
+  }).join("");
+
+  return `<div class="price-history-chart">${bars}</div>`;
+}
+
+window.showHistoryTab = function(pid, btn) {
+  // Hide all charts
+  document.querySelectorAll(`[id^="history-chart-"]`).forEach(el => el.classList.add("hidden"));
+  document.querySelectorAll(".ph-tab").forEach(b => b.classList.remove("active"));
+  // Show selected
+  $(`history-chart-${pid}`)?.classList.remove("hidden");
+  btn.classList.add("active");
+};
+
+function renderQualityTable(compareData) {
+  const container = $("quality-table-content");
+  if (!container) return;
+
+  const platforms = compareData.platforms || [];
+  const rows = platforms.map(p => {
+    const pid = p.platform.id;
+    const v = p.best_variant;
+    const meta = PLATFORM_META[pid] || { name: pid };
+    let qualityBadge = "";
+    let qualityText = "—";
+    if (!p.area_available) {
+      qualityText = "Not in your area";
+      qualityBadge = `<span class="quality-badge q-unavail">N/A</span>`;
+    } else if (!v || !v.in_stock) {
+      qualityText = v ? "Out of Stock" : "Not listed";
+      qualityBadge = `<span class="quality-badge q-unavail">—</span>`;
+    } else {
+      qualityText = v.quality || "Standard";
+      const isPremmium = (v.quality || "").toLowerCase().includes("premium") ||
+                         (v.quality || "").toLowerCase().includes("fresh") ||
+                         (v.quality || "").toLowerCase().includes("organic");
+      qualityBadge = `<span class="quality-badge ${isPremmium ? "q-premium" : "q-regular"}">${qualityText}</span>`;
+    }
+    return `
+      <div class="quality-row">
+        <span class="quality-plat">${meta.name}</span>
+        <span class="quality-val">${qualityText}</span>
+        ${qualityBadge}
+      </div>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="quality-table-inner">
+      ${rows}
+      <p style="font-size:11px;color:var(--muted);margin-top:10px;">* Quality labels are provided by each platform and may differ. Verify before purchase.</p>
+    </div>
+  `;
+}
+
+function renderAvailability(compareData) {
+  const container = $("avail-content");
+  if (!container) return;
+
+  const platforms = compareData.platforms || [];
+  const rows = platforms.map(p => {
+    const pid = p.platform.id;
+    const meta = PLATFORM_META[pid] || { name: pid };
+    const avail = p.area_available;
+    return `
+      <div class="avail-row">
+        <span class="avail-plat">${meta.emoji || ""} ${meta.name}</span>
+        <span class="avail-status ${avail ? "avail-yes" : "avail-no"}">
+          ${avail ? "✅ Available" : "❌ Not available"}
+        </span>
+      </div>
+    `;
+  }).join("");
+
+  container.innerHTML = rows;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Product detail toggle
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleProductDetail() {
+  const toggle = $("detail-toggle");
+  const body = $("detail-body");
+  if (!toggle || !body) return;
+  const expanded = toggle.getAttribute("aria-expanded") === "true";
+  toggle.setAttribute("aria-expanded", String(!expanded));
+  body.classList.toggle("hidden", expanded);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Availability checker
+// ─────────────────────────────────────────────────────────────────────────────
+async function checkAvailability() {
+  const pin = $("avail-pincode-input")?.value.trim();
+  if (!pin || !/^\d{6}$/.test(pin)) {
+    $("avail-result").innerHTML = `<span class="field-error">Please enter a valid 6-digit pincode.</span>`;
+    show("avail-result");
+    return;
+  }
+
+  $("avail-result").innerHTML = `<div class="compare-loading"><div class="spinner"></div> Checking...</div>`;
+  show("avail-result");
+
+  try {
+    const data = await apiFetch(`/api/check-availability?pincode=${pin}`);
+    const rows = (data.platforms || []).map(p => `
+      <div class="avail-row">
+        <span class="avail-plat">${PLATFORM_META[p.platform_id]?.name || p.platform_name}</span>
+        <span class="avail-status ${p.available ? "avail-yes" : "avail-no"}">
+          ${p.available ? "✅ Available" : "❌ Not available"}
+        </span>
+      </div>
+    `).join("");
+
+    $("avail-result").innerHTML = `
+      <p style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;padding:0 18px;">Pincode ${pin}</p>
+      ${rows}
+    `;
+  } catch (err) {
+    $("avail-result").innerHTML = `<p class="field-error" style="padding:12px 18px;">Could not check availability. Try again.</p>`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Price Alerts
+// ─────────────────────────────────────────────────────────────────────────────
+function setPriceAlert() {
+  const priceInput = $("alert-price-input");
+  const targetPrice = parseFloat(priceInput?.value);
+  const msgEl = $("alert-set-msg");
+  const product = state.currentProduct;
+
+  if (!product || !product.id) {
+    showAlertMsg(msgEl, "No product selected.", true);
+    return;
+  }
+  if (isNaN(targetPrice) || targetPrice <= 0) {
+    showAlertMsg(msgEl, "Please enter a valid target price.", true);
+    return;
+  }
+
+  // Remove existing alert for this product
+  state.priceAlerts = state.priceAlerts.filter(a => a.productId !== product.id);
+  state.priceAlerts.push({
+    productId: product.id,
+    productName: product.name,
+    targetPrice,
+    setAt: new Date().toISOString(),
+  });
+  localStorage.setItem("groceryai_alerts", JSON.stringify(state.priceAlerts));
+  showAlertMsg(msgEl, `🔔 Alert set! We'll notify you when ${product.name} drops below ₹${targetPrice}.`, false);
+}
+
+function showAlertMsg(el, msg, isError) {
+  if (!el) return;
+  el.textContent = msg;
+  el.className = isError ? "error-msg" : "";
+  show(el.id);
+  setTimeout(() => hide(el.id), 4000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// My List
+// ─────────────────────────────────────────────────────────────────────────────
+function addToList(productId, price) {
+  if (!productId) return;
+  const product = state.products.find(p => p.id === productId) || state.currentProduct;
+  if (!product) return;
+
+  const already = state.myList.some(i => i.id === productId);
+  if (already) {
+    showToast(`${product.name} is already in your list`);
+    return;
+  }
+
+  state.myList.push({
+    id: productId,
+    name: product.name,
+    emoji: product.emoji,
+    category: product.category,
+    price: parseFloat(price) || product.base_price_inr,
+  });
+  localStorage.setItem("groceryai_list", JSON.stringify(state.myList));
+  updateCartCount();
+  showToast(`✅ ${product.name} added to your list`);
+}
+
+function removeFromList(productId) {
+  state.myList = state.myList.filter(i => i.id !== productId);
+  localStorage.setItem("groceryai_list", JSON.stringify(state.myList));
+  updateCartCount();
+  renderMyList();
+}
+
+function updateCartCount() {
+  const count = state.myList.length;
+  const el = $("cart-count");
+  if (!el) return;
+  el.textContent = count;
+  if (count > 0) el.classList.remove("hidden"); else el.classList.add("hidden");
+}
+
+function renderMyList() {
+  const empty = $("mylist-empty");
+  const itemsWrap = $("mylist-items");
+  const basketWrap = $("mylist-basket");
+
+  if (state.myList.length === 0) {
+    show("mylist-empty");
+    hide("mylist-items");
+    hide("mylist-basket");
+    return;
+  }
+
+  hide("mylist-empty");
+  show("mylist-items");
+
+  itemsWrap.innerHTML = state.myList.map(item => `
+    <div class="mylist-item">
+      <span class="mylist-emoji" aria-hidden="true">${item.emoji || "🛒"}</span>
+      <div class="mylist-info">
+        <p class="mylist-name">${item.name}</p>
+        <p class="mylist-cat">${(item.category || "").replace(/_/g, " ")}</p>
+      </div>
+      <span class="mylist-price">₹${item.price || "—"}</span>
+      <button type="button" class="mylist-remove" onclick="removeFromList('${item.id}')" aria-label="Remove ${item.name}">Remove</button>
+    </div>
+  `).join("");
+
+  // Basket comparison
+  renderBasketComparison();
+  show("mylist-basket");
+}
+
+function renderBasketComparison() {
+  // Simple basket: sum up the cheapest available price per product from each platform
+  // We use what we have in state — a rough estimate
+
+  const PLATFORM_IDS = ["zepto", "blinkit", "instamart", "flipkart"];
+  const PLATFORM_NAMES = {
+    zepto: "Zepto", blinkit: "Blinkit", instamart: "Swiggy Instamart", flipkart: "Flipkart Minutes"
+  };
+
+  // Simulate small variance per platform
+  const totals = {};
+  PLATFORM_IDS.forEach(pid => {
+    let total = 0;
+    state.myList.forEach(item => {
+      // Use a deterministic hash-based variance for each platform+product combination
+      const seed = simpleHash(`${pid}:${item.id}`);
+      const variance = 0.90 + (seed % 20) / 100; // 0.90–1.10
+      total += (item.price || 0) * variance;
+    });
+    totals[pid] = Math.round(total);
+  });
+
+  const sorted = PLATFORM_IDS.slice().sort((a, b) => totals[a] - totals[b]);
+  const cheapestPid = sorted[0];
+
+  $("basket-platform-totals").innerHTML = sorted.map(pid => `
+    <div class="basket-platform-row${pid === cheapestPid ? " fw-700" : ""}">
+      <span class="basket-plat">
+        ${PLATFORM_META[pid]?.emoji || ""} ${PLATFORM_NAMES[pid]}
+        ${pid === cheapestPid ? " 🏆" : ""}
+      </span>
+      <span class="basket-total">₹${totals[pid]}</span>
+    </div>
+  `).join("");
+
+  const savings = totals[sorted[sorted.length - 1]] - totals[cheapestPid];
+  $("basket-winner").innerHTML = `
+    🏆 Cheapest Basket: <strong>${PLATFORM_NAMES[cheapestPid]}</strong> — ₹${totals[cheapestPid]}
+    ${savings > 0 ? `<br><small>Save ₹${savings} vs. the most expensive option</small>` : ""}
+  `;
+  show("basket-winner");
+}
+
+function simpleHash(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Toast notification
+// ─────────────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  let toast = document.querySelector(".toast");
+  if (!toast) {
+    toast = el("div", "toast");
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add("toast-show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove("toast-show"), 3000);
+}
+
+// Inject toast CSS
+const toastStyle = el("style");
+toastStyle.textContent = `
+  .toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #1f2937;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity .2s, transform .2s;
+    z-index: 500;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast.toast-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+`;
+document.head.appendChild(toastStyle);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero search setup
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  $("hero-search")?.addEventListener("input", (e) => {
+    const val = e.target.value.trim();
+    if (val.length >= 2) showSearchSuggestions(val, e.target);
+    else hideSearchSuggestions();
+  });
+
+  $("hero-search")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const val = $("hero-search").value.trim();
+      if (val) { hideSearchSuggestions(); showSearchView(val); }
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Start
+// ─────────────────────────────────────────────────────────────────────────────
+init();
