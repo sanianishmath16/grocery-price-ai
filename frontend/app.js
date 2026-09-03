@@ -1,15 +1,26 @@
 /**
- * app.js — GroceryAI v10
+ * app.js — GroceryAI v13
  *
  * Full SPA: Home → Category → Product Comparison
  * Features:
- *   - Category browsing + product grid
- *   - Global search with autocomplete
+ *   - Category browsing + product grid with real product images
+ *   - Global search with autocomplete (brand, category, variant-aware)
  *   - Per-product platform comparison with quantity normalization
+ *   - ALL size variants shown per platform card with interactive pills
+ *   - Best (cheapest available) variant pre-selected; click pills to switch
  *   - Pincode-based availability
- *   - Price history charts
+ *   - Cheapest available calculation (code-based, not AI)
+ *   - MRP / discount display
+ *   - Product image shown in comparison header
+ *   - "Search on Platform" links (real platform search URLs, clearly labelled)
  *   - Price alerts (localStorage)
  *   - My List / shopping basket comparison
+ *   - 52 products, 4 platforms, Flipkart duplicate keys removed
+ *
+ * Data note: All platform prices are representative demo data.
+ * Buy Now buttons open the platform's legitimate search page for the product.
+ * Direct product page URLs are not generated because we do not have real
+ * platform product IDs — doing so would produce broken 404 links.
  */
 
 "use strict";
@@ -284,16 +295,22 @@ function buildProductCard(product, fromView) {
     ? product.category.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
     : "";
 
+  // Image: use real product image URL if available, otherwise show emoji fallback
+  const imgHtml = product.image_url
+    ? `<img src="${product.image_url}" alt="${product.name}" class="product-card-img" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" /><span class="product-card-emoji-fallback" style="display:none">${product.emoji || "🛒"}</span>`
+    : `<span class="product-card-emoji-fallback">${product.emoji || "🛒"}</span>`;
+
   card.innerHTML = `
     ${inList ? '<span class="in-list-badge">✓ In List</span>' : ""}
     <div class="product-img-wrap" aria-hidden="true">
-      <span>${product.emoji || "🛒"}</span>
+      ${imgHtml}
     </div>
     <div class="product-card-body">
       <p class="product-card-name">${product.name}</p>
+      ${product.brand ? `<p class="product-card-brand">${product.brand}</p>` : ""}
       <p class="product-card-cat">${catName}</p>
       <div class="product-card-price-row">
-        <span class="product-card-price">₹${product.base_price_inr}</span>
+        <span class="product-card-price">from ₹${product.base_price_inr}</span>
         <span class="product-card-unit">/ ${product.available_sizes?.[0] || "1 unit"}</span>
       </div>
       <div class="product-card-rating">⭐ ${product.rating || "4.3"}</div>
@@ -416,8 +433,10 @@ function showSearchSuggestions(query, inputEl) {
   const q = query.toLowerCase();
   const matches = state.products.filter(p =>
     p.name.toLowerCase().includes(q) ||
-    (p.tags || []).some(t => t.toLowerCase().includes(q))
-  ).slice(0, 6);
+    (p.brand || "").toLowerCase().includes(q) ||
+    (p.tags || []).some(t => t.toLowerCase().includes(q)) ||
+    (p.subcategory || "").toLowerCase().includes(q)
+  ).slice(0, 7);
 
   const container = $("search-suggestions");
   if (!container || !matches.length) { hideSearchSuggestions(); return; }
@@ -429,9 +448,15 @@ function showSearchSuggestions(query, inputEl) {
     item.setAttribute("tabindex", "0");
     const highlighted = p.name.replace(new RegExp(`(${escapeRe(query)})`, "gi"), "<strong>$1</strong>");
     const catLabel = (p.category || "").replace(/_/g, " ");
+    // Show size variants as small pills if available
+    const sizePills = (p.available_sizes || []).slice(0, 3)
+      .map(s => `<span class="sugg-size-pill">${s}</span>`).join("");
     item.innerHTML = `
       <span class="suggestion-emoji" aria-hidden="true">${p.emoji || "🛒"}</span>
-      <span class="suggestion-text">${highlighted}</span>
+      <span class="suggestion-text-wrap">
+        <span class="suggestion-text">${highlighted}</span>
+        ${sizePills ? `<span class="suggestion-sizes">${sizePills}</span>` : ""}
+      </span>
       <span class="suggestion-cat">${catLabel}</span>
     `;
     item.addEventListener("click", () => {
@@ -499,18 +524,29 @@ async function loadProductComparison(productId) {
     const product = productData.product;
     state.currentProduct = product;
 
-    // Update product header
-    $("product-hero-emoji").textContent = product.emoji || "🛒";
+    // Update product header — image or emoji
+    const heroImgEl = $("product-hero-img");
+    const heroEmojiEl = $("product-hero-emoji");
+    if (product.image_url && heroImgEl) {
+      heroImgEl.src = product.image_url;
+      heroImgEl.alt = product.name;
+      heroImgEl.classList.remove("hidden");
+      heroEmojiEl.classList.add("hidden");
+    } else {
+      if (heroImgEl) heroImgEl.classList.add("hidden");
+      heroEmojiEl.classList.remove("hidden");
+      heroEmojiEl.textContent = product.emoji || "🛒";
+    }
     $("product-hero-name").textContent  = product.name;
-    $("product-hero-meta").textContent  = `${(product.category || "").replace(/_/g, " ")} · ${product.origin || ""}`;
+    const brandPart = product.brand ? ` · ${product.brand}` : "";
+    $("product-hero-meta").textContent  = `${(product.category || "").replace(/_/g, " ")}${brandPart}`;
     $("product-pincode-display").textContent = pincode;
 
     // Render platform comparison
     renderPlatformCards(compareData);
     renderProductDetails(product);
-    renderPriceHistory(compareData, product);
-    renderQualityTable(compareData);
     renderAvailability(compareData);
+    renderDataNote(compareData);
 
     // Populate price alert with suggested price
     const cheapest = getCheapestVariant(compareData);
@@ -537,6 +573,74 @@ function getCheapestVariant(compareData) {
   return bests.reduce((a, b) => (a.normalized_price || 9999) < (b.normalized_price || 9999) ? a : b);
 }
 
+// ---------------------------------------------------------------------------
+// Per-card state: track which variant index is selected for each platform
+// ---------------------------------------------------------------------------
+const _cardSelectedVariant = {};
+
+function _renderVariantPrice(v, isCheapest, pid, meta, areaAvail) {
+  if (!areaAvail) {
+    return {
+      priceHtml: `<span class="platform-price-big text-muted">—</span><span class="platform-price-norm text-muted">Not in area</span>`,
+      buyBtnHtml: `<span class="buy-btn buy-btn-unavail">Not in your area</span>`,
+      stockHtml: `<span class="plat-detail-val out-of-stock">❌ Not available</span>`,
+      qty: "—", brand: "—",
+    };
+  }
+  if (!v) {
+    return {
+      priceHtml: `<span class="platform-price-big text-muted">—</span><span class="platform-price-norm text-muted">Not listed</span>`,
+      buyBtnHtml: `<span class="buy-btn buy-btn-unavail">Not listed</span>`,
+      stockHtml: `<span class="plat-detail-val out-of-stock">❌ Not listed</span>`,
+      qty: "—", brand: "—",
+    };
+  }
+  const mrpHtml = v.mrp && v.mrp > v.price ? `<span class="platform-price-mrp">₹${v.mrp}</span>` : "";
+  const discountHtml = v.mrp && v.mrp > v.price
+    ? `<span class="platform-discount-tag">${Math.round((1 - v.price / v.mrp) * 100)}% off</span>` : "";
+  if (!v.in_stock) {
+    return {
+      priceHtml: `<span class="platform-price-big">₹${v.price}</span>${mrpHtml}<span class="platform-price-norm">${normLabel(v)}</span><span class="platform-qty">${v.display_quantity || ""}</span>`,
+      buyBtnHtml: `<span class="buy-btn buy-btn-unavail">❌ Out of Stock</span>`,
+      stockHtml: `<span class="plat-detail-val out-of-stock">❌ Out of Stock</span>`,
+      qty: v.display_quantity || "—", brand: v.brand || "—",
+    };
+  }
+  const btnUrl = v.product_url || (meta && meta.website) || "#";
+  const btnLabel = v.url_is_search ? `Search on ${meta.name}` : `Buy on ${meta.name}`;
+  const btnClass = v.url_is_search ? "buy-btn buy-btn-search" : "buy-btn buy-btn-green";
+  const prodName = state.currentProduct?.name || "";
+  return {
+    priceHtml: `<span class="platform-price-big">₹${v.price}</span>${mrpHtml}<span class="platform-price-norm">${normLabel(v)}</span><span class="platform-qty">${v.display_quantity || ""}</span>${isCheapest ? '<span class="platform-cheapest-tag">🏆 CHEAPEST</span>' : ""}${discountHtml}`,
+    buyBtnHtml: `<a href="${btnUrl}" target="_blank" rel="noopener noreferrer" class="${btnClass}" aria-label="${btnLabel} for ${prodName}">${btnLabel} →</a>`,
+    stockHtml: `<span class="plat-detail-val in-stock">✅ In Stock</span>`,
+    qty: v.display_quantity || "—", brand: v.brand || "—",
+  };
+}
+
+function _updateCardVariant(pid, variantIndex, allVariants, isCheapest, areaAvail, delivery, meta, bestVariant) {
+  const card = document.getElementById(`pcard-${pid}`);
+  if (!card) return;
+  _cardSelectedVariant[pid] = variantIndex;
+
+  const v = allVariants[variantIndex] || null;
+  const { priceHtml, buyBtnHtml, stockHtml, qty, brand } = _renderVariantPrice(v, isCheapest, pid, meta, areaAvail);
+
+  card.querySelector(".pc-price-area").innerHTML = priceHtml;
+  card.querySelector(".pc-stock").innerHTML = stockHtml;
+  card.querySelector(".pc-qty").textContent = qty;
+  card.querySelector(".pc-brand").textContent = brand;
+  card.querySelector(".pc-actions").innerHTML = `
+    ${buyBtnHtml}
+    ${areaAvail && v && v.in_stock ? `<button type="button" class="add-to-list-btn" onclick="addToList('${state.currentProduct?.id}', '${v.price}')">+ My List</button>` : ""}
+  `;
+
+  // Update variant pill active states
+  card.querySelectorAll(".variant-pill").forEach((pill, i) => {
+    pill.classList.toggle("variant-pill-active", i === variantIndex);
+  });
+}
+
 function renderPlatformCards(compareData) {
   const platforms = compareData.platforms || [];
   const cheapestId = compareData.cheapest_platform_id;
@@ -548,50 +652,51 @@ function renderPlatformCards(compareData) {
     return;
   }
 
-  platforms.forEach(pData => {
+  // Sort: available first, unavailable last
+  const sorted = [...platforms].sort((a, b) => {
+    const aAvail = a.area_available && a.best_variant && a.best_variant.in_stock ? 0 : 1;
+    const bAvail = b.area_available && b.best_variant && b.best_variant.in_stock ? 0 : 1;
+    return aAvail - bAvail;
+  });
+
+  sorted.forEach(pData => {
     const pid = pData.platform.id;
     const meta = PLATFORM_META[pid] || { name: pid, emoji: "🏪", css: pid, logoText: pid[0] };
     const isCheapest = pid === cheapestId;
-    const variant = pData.best_variant;
-    const isAvail = pData.area_available && variant;
+    const allVariants = pData.variants || [];
+    const bestVariant = pData.best_variant;
+    const isAvail = pData.area_available && bestVariant && bestVariant.in_stock;
+    const delivery = pData.area_available ? `⚡ ${pData.delivery_time} (est.)` : "—";
+
+    // Find the index of the best variant to pre-select it
+    const bestIdx = bestVariant
+      ? allVariants.findIndex(v => v.display_quantity === bestVariant.display_quantity && v.price === bestVariant.price)
+      : 0;
+    const initIdx = bestIdx >= 0 ? bestIdx : 0;
+    _cardSelectedVariant[pid] = initIdx;
+
+    const initVariant = allVariants[initIdx] || bestVariant;
+    const { priceHtml, buyBtnHtml, stockHtml, qty, brand } = _renderVariantPrice(
+      initVariant, isCheapest, pid, meta, pData.area_available
+    );
+
+    // Build variant size pills (only if there are multiple variants)
+    let variantPillsHtml = "";
+    if (allVariants.length > 1) {
+      const pills = allVariants.map((v, i) => {
+        const isActive = i === initIdx;
+        const outCls = !v.in_stock ? " variant-pill-oos" : "";
+        return `<button type="button" class="variant-pill${isActive ? " variant-pill-active" : ""}${outCls}"
+          title="₹${v.price} — ${normLabel(v)}${!v.in_stock ? " (Out of Stock)" : ""}"
+          onclick="_updateCardVariant('${pid}', ${i}, window.__pdata_${pid}, ${isCheapest}, ${pData.area_available}, '${delivery.replace(/'/g, "\\'")}', window.__pmeta_${pid}, null)"
+          >${v.display_quantity || `${v.quantity}${v.unit}`}</button>`;
+      }).join("");
+      variantPillsHtml = `<div class="variant-pills-row">${pills}</div>`;
+    }
 
     const card = el("div", `platform-card ${pid}-card${isCheapest ? " is-cheapest" : ""}${!isAvail ? " is-unavailable" : ""}`);
     card.setAttribute("role", "listitem");
-
-    let priceHtml = "";
-    let buyBtnHtml = "";
-    let stockHtml = "";
-
-    if (!pData.area_available) {
-      priceHtml = `<span class="platform-price-big text-muted">—</span><span class="platform-price-norm text-muted">Not available</span>`;
-      buyBtnHtml = `<span class="buy-btn buy-btn-unavail">Not in your area</span>`;
-      stockHtml = `<span class="plat-detail-val out-of-stock">❌ Not available in ${$("product-pincode-display").textContent}</span>`;
-    } else if (!variant) {
-      priceHtml = `<span class="platform-price-big text-muted">—</span><span class="platform-price-norm text-muted">Not listed</span>`;
-      buyBtnHtml = `<span class="buy-btn buy-btn-unavail">Not listed</span>`;
-      stockHtml = `<span class="plat-detail-val out-of-stock">❌ Not listed</span>`;
-    } else if (!variant.in_stock) {
-      priceHtml = `
-        <span class="platform-price-big">₹${variant.price}</span>
-        <span class="platform-price-norm">${normLabel(variant)}</span>
-        <span class="platform-qty">${variant.display_quantity || ""}</span>
-      `;
-      buyBtnHtml = `<span class="buy-btn buy-btn-unavail">❌ Out of Stock</span>`;
-      stockHtml = `<span class="plat-detail-val out-of-stock">❌ Out of Stock</span>`;
-    } else {
-      priceHtml = `
-        <span class="platform-price-big">₹${variant.price}</span>
-        <span class="platform-price-norm">${normLabel(variant)}</span>
-        <span class="platform-qty">${variant.display_quantity || ""}</span>
-        ${isCheapest ? '<span class="platform-cheapest-tag">🏆 CHEAPEST</span>' : ""}
-      `;
-      buyBtnHtml = `<a href="${variant.product_url || pData.platform.website}" target="_blank" rel="noopener" class="buy-btn buy-btn-green" aria-label="Buy ${state.currentProduct?.name || ""} on ${meta.name}">Buy on ${meta.name}</a>`;
-      stockHtml = `<span class="plat-detail-val in-stock">✅ In Stock</span>`;
-    }
-
-    const qty = variant ? variant.display_quantity : "—";
-    const quality = variant ? variant.quality : "—";
-    const delivery = pData.area_available ? `⚡ ${pData.delivery_time} (est.)` : "—";
+    card.id = `pcard-${pid}`;
 
     card.innerHTML = `
       <div class="platform-card-left">
@@ -599,37 +704,38 @@ function renderPlatformCards(compareData) {
           <div class="platform-logo ${pid}-logo" aria-hidden="true">${meta.logoText}</div>
           <span class="platform-name-text">${meta.name}</span>
         </div>
+        ${variantPillsHtml}
         <div class="platform-detail-grid">
           <div class="plat-detail-item">
-            <span class="plat-detail-label">Quantity</span>
-            <span class="plat-detail-val">${qty}</span>
+            <span class="plat-detail-label">Brand</span>
+            <span class="plat-detail-val pc-brand">${brand}</span>
           </div>
           <div class="plat-detail-item">
-            <span class="plat-detail-label">Quality</span>
-            <span class="plat-detail-val">${quality}</span>
+            <span class="plat-detail-label">Quantity</span>
+            <span class="plat-detail-val pc-qty">${qty}</span>
           </div>
           <div class="plat-detail-item">
             <span class="plat-detail-label">Stock</span>
-            ${stockHtml}
+            <span class="pc-stock">${stockHtml}</span>
           </div>
           <div class="plat-detail-item">
             <span class="plat-detail-label">Delivery</span>
             <span class="plat-detail-val delivery-badge">${delivery}</span>
           </div>
-          <div class="plat-detail-item">
-            <span class="plat-detail-label">Pincode</span>
-            <span class="plat-detail-val">${$("product-pincode-display").textContent}</span>
-          </div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        <div class="pc-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
           ${buyBtnHtml}
-          ${isAvail && variant ? `<button type="button" class="add-to-list-btn" onclick="addToList('${state.currentProduct?.id}', '${variant.price}')">+ My List</button>` : ""}
+          ${isAvail && initVariant ? `<button type="button" class="add-to-list-btn" onclick="addToList('${state.currentProduct?.id}', '${initVariant.price}')">+ My List</button>` : ""}
         </div>
       </div>
       <div class="platform-card-right">
-        ${priceHtml}
+        <div class="pc-price-area">${priceHtml}</div>
       </div>
     `;
+
+    // Store variant data on window so onclick can access it
+    window[`__pdata_${pid}`] = allVariants;
+    window[`__pmeta_${pid}`] = meta;
 
     container.appendChild(card);
   });
@@ -664,6 +770,10 @@ function renderProductDetails(product) {
 
   body.innerHTML = `
     <div class="detail-grid">
+      ${product.brand ? `<div class="detail-item">
+        <span class="detail-label">Brand</span>
+        <span class="detail-val" style="color:var(--blue);font-weight:600">${product.brand}</span>
+      </div>` : ""}
       <div class="detail-item">
         <span class="detail-label">Category</span>
         <span class="detail-val">${(product.category || "").replace(/_/g, " ")}</span>
@@ -697,113 +807,20 @@ function renderProductDetails(product) {
   `;
 }
 
-function renderPriceHistory(compareData, product) {
-  const container = $("price-history-content");
-  if (!container) return;
-
-  const platforms = compareData.platforms || [];
-  const availPlatforms = platforms.filter(p => p.history && p.history.length);
-
-  if (!availPlatforms.length) {
-    container.innerHTML = `<p class="text-muted" style="padding:16px 18px;font-size:13px;">Price history not available.</p>`;
-    return;
+function renderDataNote(compareData) {
+  // Show data freshness note — find or create element
+  let noteEl = $("data-note-bar");
+  if (!noteEl) {
+    noteEl = el("div", "data-note-bar");
+    noteEl.id = "data-note-bar";
+    const wrap = $("product-detail-wrap");
+    if (wrap) wrap.insertBefore(noteEl, wrap.firstChild);
   }
-
-  // Tabs for each platform
-  const tabsHtml = availPlatforms.map((p, i) => `
-    <button type="button" class="ph-tab${i === 0 ? " active" : ""}" onclick="showHistoryTab('${p.platform.id}', this)" data-pid="${p.platform.id}">
-      ${PLATFORM_META[p.platform.id]?.name || p.platform.id}
-    </button>
-  `).join("");
-
-  const chartsHtml = availPlatforms.map((p, i) => `
-    <div id="history-chart-${p.platform.id}" class="price-history-inner${i === 0 ? "" : " hidden"}">
-      ${buildHistoryChart(p.history, p.platform.id)}
-      <p style="font-size:12px;color:var(--muted);margin-top:4px;">
-        Lowest this week: <strong>₹${Math.min(...p.history.map(h => h.price))}</strong>
-        · Highest: <strong>₹${Math.max(...p.history.map(h => h.price))}</strong>
-      </p>
-    </div>
-  `).join("");
-
-  container.innerHTML = `
-    <div class="price-history-tabs">${tabsHtml}</div>
-    ${chartsHtml}
-  `;
-}
-
-function buildHistoryChart(history, pid) {
-  if (!history || !history.length) return "";
-  const prices = history.map(h => h.price);
-  const maxP = Math.max(...prices);
-  const minP = Math.min(...prices);
-  const range = maxP - minP || 1;
-  const maxH = 68; // px
-
-  const bars = history.map((h, i) => {
-    const heightPct = ((h.price - minP) / range) * 0.7 + 0.3;
-    const height = Math.round(heightPct * maxH);
-    const isCurrent = i === history.length - 1;
-    return `
-      <div class="history-bar-wrap">
-        <span class="history-price">₹${h.price}</span>
-        <div class="history-bar${isCurrent ? " current" : ""}" style="height:${height}px;" title="${h.day}: ₹${h.price}"></div>
-        <span class="history-label">${h.day}</span>
-      </div>
-    `;
-  }).join("");
-
-  return `<div class="price-history-chart">${bars}</div>`;
-}
-
-window.showHistoryTab = function(pid, btn) {
-  // Hide all charts
-  document.querySelectorAll(`[id^="history-chart-"]`).forEach(el => el.classList.add("hidden"));
-  document.querySelectorAll(".ph-tab").forEach(b => b.classList.remove("active"));
-  // Show selected
-  $(`history-chart-${pid}`)?.classList.remove("hidden");
-  btn.classList.add("active");
-};
-
-function renderQualityTable(compareData) {
-  const container = $("quality-table-content");
-  if (!container) return;
-
-  const platforms = compareData.platforms || [];
-  const rows = platforms.map(p => {
-    const pid = p.platform.id;
-    const v = p.best_variant;
-    const meta = PLATFORM_META[pid] || { name: pid };
-    let qualityBadge = "";
-    let qualityText = "—";
-    if (!p.area_available) {
-      qualityText = "Not in your area";
-      qualityBadge = `<span class="quality-badge q-unavail">N/A</span>`;
-    } else if (!v || !v.in_stock) {
-      qualityText = v ? "Out of Stock" : "Not listed";
-      qualityBadge = `<span class="quality-badge q-unavail">—</span>`;
-    } else {
-      qualityText = v.quality || "Standard";
-      const isPremmium = (v.quality || "").toLowerCase().includes("premium") ||
-                         (v.quality || "").toLowerCase().includes("fresh") ||
-                         (v.quality || "").toLowerCase().includes("organic");
-      qualityBadge = `<span class="quality-badge ${isPremmium ? "q-premium" : "q-regular"}">${qualityText}</span>`;
-    }
-    return `
-      <div class="quality-row">
-        <span class="quality-plat">${meta.name}</span>
-        <span class="quality-val">${qualityText}</span>
-        ${qualityBadge}
-      </div>
-    `;
-  }).join("");
-
-  container.innerHTML = `
-    <div class="quality-table-inner">
-      ${rows}
-      <p style="font-size:11px;color:var(--muted);margin-top:10px;">* Quality labels are provided by each platform and may differ. Verify before purchase.</p>
-    </div>
-  `;
+  const note = compareData.data_note || "";
+  noteEl.innerHTML = note
+    ? `<svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13" style="flex-shrink:0" aria-hidden="true"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm-.5 2v4h1V5h-1zm0 5v1h1v-1h-1z"/></svg> ${note}`
+    : "";
+  noteEl.style.display = note ? "flex" : "none";
 }
 
 function renderAvailability(compareData) {

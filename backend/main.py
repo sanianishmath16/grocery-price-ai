@@ -122,7 +122,9 @@ async def list_products(
             p for p in products
             if q_lower in p["name"].lower()
             or q_lower in p["id"].lower()
+            or q_lower in p.get("brand", "").lower()
             or any(q_lower in tag.lower() for tag in p.get("tags", []))
+            or q_lower in p.get("subcategory", "").lower()
         ]
 
     return {"products": products[:limit], "total": len(products)}

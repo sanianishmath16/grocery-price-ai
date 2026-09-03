@@ -21,7 +21,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 
-  <link rel="stylesheet" href="style.css?v=10" />
+  <link rel="stylesheet" href="style.css?v=13" />
 </head>
 <body>
 
@@ -303,6 +303,7 @@
           Back
         </button>
         <div class="product-hero-content">
+          <img id="product-hero-img" class="product-hero-img hidden" alt="" loading="lazy" onerror="this.classList.add('hidden');document.getElementById('product-hero-emoji').classList.remove('hidden')" />
           <div class="product-hero-emoji" id="product-hero-emoji" aria-hidden="true">🍅</div>
           <div>
             <h1 class="product-hero-name" id="product-hero-name">Fresh Tomato</h1>
@@ -352,22 +353,6 @@
           </svg>
         </button>
         <div id="detail-body" class="detail-body hidden">
-          <!-- populated by JS -->
-        </div>
-      </div>
-
-      <!-- Price history -->
-      <div class="price-history-card" id="price-history-card">
-        <h3 class="card-section-title">📈 Price History (7 days)</h3>
-        <div id="price-history-content">
-          <!-- populated by JS -->
-        </div>
-      </div>
-
-      <!-- Quality comparison table -->
-      <div class="quality-table-card" id="quality-table-card">
-        <h3 class="card-section-title">⭐ Quality Comparison</h3>
-        <div id="quality-table-content">
           <!-- populated by JS -->
         </div>
       </div>
@@ -485,6 +470,6 @@
   </div>
 </footer>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
