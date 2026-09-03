@@ -106,15 +106,22 @@ async def list_categories():
 async def list_products(
     category: Optional[str] = Query(None, description="Filter by category id"),
     q: Optional[str] = Query(None, description="Search query"),
+    brand: Optional[str] = Query(None, description="Filter by brand name"),
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
     """
-    List products, optionally filtered by category and/or search query.
+    List products, optionally filtered by category, brand and/or search query.
+    Supports pagination via limit/offset.
     """
     if category:
         products = PRODUCTS_BY_CATEGORY.get(category, [])
     else:
-        products = PRODUCTS
+        products = list(PRODUCTS)  # copy to allow filtering
+
+    if brand:
+        brand_lower = brand.lower()
+        products = [p for p in products if brand_lower in p.get("brand", "").lower()]
 
     if q:
         q_lower = q.lower()
@@ -125,9 +132,32 @@ async def list_products(
             or q_lower in p.get("brand", "").lower()
             or any(q_lower in tag.lower() for tag in p.get("tags", []))
             or q_lower in p.get("subcategory", "").lower()
+            or q_lower in p.get("category", "").lower()
         ]
 
-    return {"products": products[:limit], "total": len(products)}
+    total = len(products)
+    paginated = products[offset: offset + limit]
+    return {"products": paginated, "total": total, "offset": offset, "limit": limit}
+
+
+@app.get("/api/brands", tags=["catalogue"])
+async def list_brands():
+    """Return all unique brands in the catalogue with product count."""
+    brand_map: dict = {}
+    for p in PRODUCTS:
+        brand = p.get("brand", "")
+        if not brand:
+            continue
+        if brand not in brand_map:
+            brand_map[brand] = {"name": brand, "count": 0, "categories": set()}
+        brand_map[brand]["count"] += 1
+        brand_map[brand]["categories"].add(p.get("category", ""))
+    # Convert sets to lists for JSON serialisation
+    brands = [
+        {"name": b, "count": d["count"], "categories": list(d["categories"])}
+        for b, d in sorted(brand_map.items(), key=lambda x: x[1]["count"], reverse=True)
+    ]
+    return {"brands": brands}
 
 
 @app.get("/api/product/{product_id}", tags=["catalogue"])

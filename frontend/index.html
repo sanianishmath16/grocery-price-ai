@@ -3,25 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>GroceryAI — Compare Prices Across Zepto, Blinkit, Instamart & Flipkart Minutes</title>
-
-  <meta name="description" content="Compare grocery prices across Zepto, Blinkit, Swiggy Instamart and Flipkart Minutes. Find the cheapest option instantly." />
+  <title>GroceryAI — Compare Grocery Prices Across Zepto, Blinkit, Instamart & Flipkart Minutes</title>
+  <meta name="description" content="Compare grocery prices across Zepto, Blinkit, Swiggy Instamart and Flipkart Minutes. Find the cheapest option instantly for 100+ products." />
   <meta name="theme-color" content="#16a34a" />
-
-  <!-- Open Graph -->
   <meta property="og:title" content="GroceryAI — Compare Grocery Prices" />
   <meta property="og:description" content="Find the best grocery price in one click. Compare Blinkit, Zepto, Instamart and Flipkart Minutes." />
   <meta property="og:type" content="website" />
-
-  <!-- iOS PWA -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="GroceryAI" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-
-  <link rel="stylesheet" href="style.css?v=13" />
+  <link rel="stylesheet" href="style.css?v=30" />
 </head>
 <body>
 
@@ -42,27 +36,24 @@
       <span class="brand-name">GroceryAI</span>
     </a>
 
-    <!-- Global search -->
     <div class="nav-search-wrap" id="nav-search-wrap">
       <div class="nav-search-box">
         <svg class="nav-search-icon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
           <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
         </svg>
-        <input type="text" id="global-search" placeholder="Search groceries, fruits, vegetables..." autocomplete="off" aria-label="Search products" />
+        <input type="text" id="global-search" placeholder="Search groceries, brands, categories..." autocomplete="off" aria-label="Search products" />
         <button type="button" id="search-clear-btn" class="search-clear hidden" aria-label="Clear search">×</button>
       </div>
       <div id="search-suggestions" class="search-suggestions hidden" role="listbox" aria-label="Search suggestions"></div>
     </div>
 
     <div class="nav-right">
-      <!-- Location pill -->
       <button type="button" class="location-pill" id="nav-location-btn" onclick="promptPincode()" aria-label="Set delivery location">
         <svg viewBox="0 0 16 16" fill="currentColor" width="13" height="13" aria-hidden="true">
           <path fill-rule="evenodd" d="M8 2a4 4 0 100 8 4 4 0 000-8zM2 8c0-3.314 2.686-6 6-6s6 2.686 6 6c0 2.5-1.531 4.808-3.5 6.247a.75.75 0 01-.866 0C7.531 12.808 6 10.5 6 8a2 2 0 114 0" clip-rule="evenodd"/>
         </svg>
         <span id="nav-location-text">Set Location</span>
       </button>
-      <!-- Cart -->
       <button type="button" class="cart-pill" onclick="showMyList()" aria-label="My grocery list">
         <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
           <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3z"/>
@@ -90,8 +81,7 @@
     </div>
     <p class="modal-sub">Enter your 6-digit pincode to see availability and prices in your area.</p>
     <div class="modal-pincode-row">
-      <input type="text" id="modal-pincode" inputmode="numeric" maxlength="6" pattern="\d{6}"
-        placeholder="e.g. 560001" aria-label="Enter pincode" />
+      <input type="text" id="modal-pincode" inputmode="numeric" maxlength="6" pattern="\d{6}" placeholder="e.g. 560001" aria-label="Enter pincode" />
       <button type="button" class="btn-primary" onclick="applyPincode()">Apply</button>
     </div>
     <p id="modal-pincode-error" class="field-error hidden">Please enter a valid 6-digit pincode.</p>
@@ -124,28 +114,28 @@
       <div class="hero-inner">
         <div class="hero-badge">
           <span class="badge-dot"></span>
-          Compare prices in real time
+          Compare prices across 4 platforms
         </div>
         <h1 class="hero-h1">
-          Find the <span class="hero-accent">cheapest</span><br>grocery price — instantly
+          Find the <span class="hero-accent">cheapest</span> grocery<br class="hero-br"> price — instantly
         </h1>
         <p class="hero-sub">
-          Click any product to compare prices across Zepto, Blinkit,<br class="hero-br"> Swiggy Instamart &amp; Flipkart Minutes.
+          Search 100+ grocery products. Compare prices across Zepto, Blinkit,<br class="hero-br"> Swiggy Instamart &amp; Flipkart Minutes.
         </p>
         <div class="hero-search-row">
           <div class="hero-search-box">
             <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
               <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
             </svg>
-            <input type="text" id="hero-search" placeholder="Search groceries..." autocomplete="off" aria-label="Search products" />
+            <input type="text" id="hero-search" placeholder="Search groceries, atta, milk, rice, shampoo..." autocomplete="off" aria-label="Search products" />
           </div>
-          <button type="button" class="btn-primary hero-cta" onclick="focusHeroSearch()">Compare Prices</button>
+          <button type="button" class="hero-cta" onclick="focusHeroSearch()">Compare Prices</button>
         </div>
         <div class="platform-pills" aria-label="Supported platforms">
-          <span class="plat-pill zepto-pill">⚡ Zepto</span>
-          <span class="plat-pill blinkit-pill">💛 Blinkit</span>
-          <span class="plat-pill instamart-pill">🟠 Instamart</span>
-          <span class="plat-pill flipkart-pill">🔵 Fk Minutes</span>
+          <span class="plat-pill">⚡ Zepto</span>
+          <span class="plat-pill">💛 Blinkit</span>
+          <span class="plat-pill">🟠 Instamart</span>
+          <span class="plat-pill">🔵 Fk Minutes</span>
         </div>
       </div>
     </section>
@@ -158,7 +148,6 @@
           <a href="#" class="see-all" onclick="showAllCategories(); return false;">See all →</a>
         </div>
         <div class="categories-scroll" id="categories-scroll" role="list" aria-label="Product categories">
-          <!-- populated by JS -->
           <div class="skel-row">
             <div class="skel-cat"></div><div class="skel-cat"></div><div class="skel-cat"></div>
             <div class="skel-cat"></div><div class="skel-cat"></div><div class="skel-cat"></div>
@@ -168,31 +157,52 @@
     </section>
 
     <!-- Deals Banner -->
-    <section class="deals-banner" aria-label="Today's deals">
+    <section class="deals-banner" aria-label="Today's highlights">
       <div class="section-inner">
+        <div class="section-head">
+          <h2 class="section-title">Why GroceryAI?</h2>
+        </div>
         <div class="deals-strip">
-          <div class="deal-card deal-green">
-            <div class="deal-icon">🥬</div>
+          <div class="deal-card deal-green" onclick="showSearchView('atta')">
+            <div class="deal-icon">🌾</div>
             <div>
-              <p class="deal-title">Fresh Vegetables</p>
-              <p class="deal-sub">Up to 30% cheaper on Blinkit today</p>
+              <p class="deal-title">Compare Atta Brands</p>
+              <p class="deal-sub">Aashirvaad, Fortune, Pillsbury & more</p>
             </div>
           </div>
-          <div class="deal-card deal-blue">
+          <div class="deal-card deal-blue" onclick="showSearchView('milk')">
             <div class="deal-icon">🥛</div>
             <div>
-              <p class="deal-title">Dairy Products</p>
-              <p class="deal-sub">Compare milk prices across all apps</p>
+              <p class="deal-title">Multiple Milk Brands</p>
+              <p class="deal-sub">Amul, Mother Dairy, Nandini</p>
             </div>
           </div>
-          <div class="deal-card deal-orange">
-            <div class="deal-icon">🍎</div>
+          <div class="deal-card deal-orange" onclick="showSearchView('rice')">
+            <div class="deal-icon">🍚</div>
             <div>
-              <p class="deal-title">Fresh Fruits</p>
-              <p class="deal-sub">Seasonal prices updated daily</p>
+              <p class="deal-title">Basmati Rice Brands</p>
+              <p class="deal-sub">India Gate, Daawat, Fortune, Kohinoor</p>
+            </div>
+          </div>
+          <div class="deal-card deal-purple" onclick="showBrandsView()">
+            <div class="deal-icon">🏷️</div>
+            <div>
+              <p class="deal-title">Browse All Brands</p>
+              <p class="deal-sub">30+ brands across all categories</p>
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Popular Brands -->
+    <section class="section" aria-label="Popular brands">
+      <div class="section-inner">
+        <div class="section-head">
+          <h2 class="section-title">Popular Brands</h2>
+          <a href="#" class="see-all" onclick="showBrandsView(); return false;">All brands →</a>
+        </div>
+        <div class="brands-scroll" id="brands-strip" role="list" aria-label="Popular brands"></div>
       </div>
     </section>
 
@@ -203,7 +213,6 @@
           <h2 class="section-title">Popular Products</h2>
         </div>
         <div class="product-grid" id="featured-products" role="list" aria-label="Popular products">
-          <!-- populated by JS -->
         </div>
       </div>
     </section>
@@ -216,19 +225,19 @@
           <div class="how-step">
             <div class="how-icon">🛒</div>
             <p class="how-title">Pick a product</p>
-            <p class="how-desc">Browse categories or search for any grocery item</p>
+            <p class="how-desc">Browse categories or search any grocery</p>
           </div>
           <div class="how-arrow">→</div>
           <div class="how-step">
             <div class="how-icon">📍</div>
             <p class="how-title">Enter your pincode</p>
-            <p class="how-desc">We check which platforms deliver to your area</p>
+            <p class="how-desc">Check which platforms deliver to you</p>
           </div>
           <div class="how-arrow">→</div>
           <div class="how-step">
             <div class="how-icon">🏆</div>
             <p class="how-title">Find the cheapest</p>
-            <p class="how-desc">See prices per kg/L — apples-to-apples comparison</p>
+            <p class="how-desc">Price per kg/L — apples-to-apples</p>
           </div>
         </div>
       </div>
@@ -238,7 +247,7 @@
 
 
   <!-- ─────────────────────────────────────────────
-       CATEGORY VIEW
+       CATEGORY / BRAND VIEW
   ──────────────────────────────────────────────── -->
   <div id="view-category" class="view hidden">
     <div class="subpage-header">
@@ -251,13 +260,23 @@
         </button>
         <div class="subpage-title-row">
           <span id="cat-emoji" class="subpage-emoji" aria-hidden="true">🥬</span>
-          <h1 id="cat-name" class="subpage-title">Vegetables</h1>
+          <h1 id="cat-name" class="subpage-title">Category</h1>
         </div>
+        <!-- Hidden elements for brand view -->
+        <span id="brand-products-title" style="display:none"></span>
+        <span id="brand-products-subtitle" style="display:none"></span>
       </div>
     </div>
     <div class="section-inner">
-      <div class="product-grid" id="category-products" role="list" aria-label="Category products">
+      <!-- Sort bar -->
+      <div class="filter-bar">
+        <span style="font-size:13px;color:var(--muted);flex-shrink:0">Sort:</span>
+        <button type="button" class="filter-chip active" onclick="applyCategorySort('default');this.closest('.filter-bar').querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">Relevance</button>
+        <button type="button" class="filter-chip" onclick="applyCategorySort('price_asc');this.closest('.filter-bar').querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">Price ↑</button>
+        <button type="button" class="filter-chip" onclick="applyCategorySort('price_desc');this.closest('.filter-bar').querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">Price ↓</button>
+        <button type="button" class="filter-chip" onclick="applyCategorySort('rating');this.closest('.filter-bar').querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));this.classList.add('active')">Rating</button>
       </div>
+      <div class="product-grid" id="category-products" role="list" aria-label="Category products"></div>
     </div>
   </div><!-- /view-category -->
 
@@ -274,19 +293,48 @@
           </svg>
           Back
         </button>
-        <h1 class="subpage-title">Search Results for "<span id="search-query-label"></span>"</h1>
+        <div class="subpage-title-row">
+          <h1 class="subpage-title">Results: "<span id="search-query-label"></span>"</h1>
+        </div>
+        <p id="search-result-count" style="font-size:13px;color:var(--muted);margin-top:4px;"></p>
       </div>
     </div>
     <div class="section-inner">
-      <div class="product-grid" id="search-products" role="list" aria-label="Search results">
-      </div>
+      <div class="product-grid" id="search-products" role="list" aria-label="Search results"></div>
       <div id="search-empty" class="empty-state hidden">
         <div class="empty-icon">🔍</div>
         <p class="empty-title">No products found</p>
-        <p class="empty-sub">Try a different search term</p>
+        <p class="empty-sub">Try a different search term like "atta", "milk", "rice" or a brand name like "Amul"</p>
       </div>
     </div>
   </div><!-- /view-search -->
+
+
+  <!-- ─────────────────────────────────────────────
+       BRANDS VIEW
+  ──────────────────────────────────────────────── -->
+  <div id="view-brands" class="view hidden">
+    <div class="subpage-header">
+      <div class="section-inner">
+        <button type="button" class="back-btn" onclick="showHome()" aria-label="Go back to home">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+            <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd"/>
+          </svg>
+          Back
+        </button>
+        <div class="subpage-title-row">
+          <span class="subpage-emoji">🏷️</span>
+          <h1 class="subpage-title">All Brands</h1>
+        </div>
+      </div>
+    </div>
+    <div class="section-inner">
+      <p style="font-size:13.5px;color:var(--muted);margin-bottom:16px;">
+        Click any brand to browse all its available products.
+      </p>
+      <div class="brands-scroll" id="brands-grid" style="flex-wrap:wrap;max-height:none;overflow-x:visible;" role="list" aria-label="All brands"></div>
+    </div>
+  </div><!-- /view-brands -->
 
 
   <!-- ─────────────────────────────────────────────
@@ -294,7 +342,7 @@
   ──────────────────────────────────────────────── -->
   <div id="view-product" class="view hidden">
     <!-- Product header -->
-    <div class="product-hero-bar" id="product-hero-bar">
+    <div class="product-hero-bar">
       <div class="section-inner">
         <button type="button" class="back-btn back-btn-light" id="product-back-btn" aria-label="Go back">
           <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
@@ -303,11 +351,12 @@
           Back
         </button>
         <div class="product-hero-content">
-          <img id="product-hero-img" class="product-hero-img hidden" alt="" loading="lazy" onerror="this.classList.add('hidden');document.getElementById('product-hero-emoji').classList.remove('hidden')" />
+          <img id="product-hero-img" class="product-hero-img hidden" alt="" loading="lazy"
+            onerror="this.classList.add('hidden');document.getElementById('product-hero-emoji').classList.remove('hidden')" />
           <div class="product-hero-emoji" id="product-hero-emoji" aria-hidden="true">🍅</div>
           <div>
-            <h1 class="product-hero-name" id="product-hero-name">Fresh Tomato</h1>
-            <p class="product-hero-meta" id="product-hero-meta">Vegetables · Farm Fresh</p>
+            <h1 class="product-hero-name" id="product-hero-name">Product</h1>
+            <p class="product-hero-meta" id="product-hero-meta">Category</p>
           </div>
         </div>
       </div>
@@ -315,12 +364,15 @@
 
     <div class="section-inner product-detail-wrap">
 
+      <!-- Data note -->
+      <div id="data-note-banner" class="data-note-banner hidden"></div>
+
       <!-- Location bar -->
       <div class="location-bar" id="product-location-bar">
         <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14" aria-hidden="true">
           <path fill-rule="evenodd" d="M8 1a5 5 0 100 10A5 5 0 008 1zM3 8a5 5 0 119.5 1.5 5 5 0 01-9.5-1.5z" clip-rule="evenodd"/>
         </svg>
-        <span id="product-location-text">📍 Deliver to: <strong id="product-pincode-display">—</strong></span>
+        <span>Deliver to: <strong id="product-pincode-display">—</strong></span>
         <button type="button" class="change-link" onclick="promptPincode()">Change</button>
       </div>
 
@@ -328,21 +380,19 @@
       <div id="best-price-banner" class="best-price-banner hidden" role="status" aria-live="polite">
         <div class="best-price-crown" aria-hidden="true">🏆</div>
         <div class="best-price-info">
-          <p class="best-price-label">Best Price</p>
+          <p class="best-price-label">Best Price Available</p>
           <p class="best-price-platform" id="best-platform-name">Blinkit</p>
         </div>
         <div class="best-price-nums">
           <p class="best-price-val" id="best-price-val">₹55</p>
           <p class="best-price-norm" id="best-price-norm">₹55/kg</p>
         </div>
-        <span class="cheapest-badge" aria-label="Cheapest option">CHEAPEST</span>
+        <span class="cheapest-badge">CHEAPEST</span>
       </div>
 
       <!-- Platform comparison cards -->
       <div class="compare-section-label">Compare across platforms</div>
-      <div id="platform-cards" class="platform-cards" role="list" aria-label="Platform price comparison">
-        <!-- populated by JS -->
-      </div>
+      <div id="platform-cards" class="platform-cards" role="list" aria-label="Platform price comparison"></div>
 
       <!-- Product details accordion -->
       <div class="product-detail-card" id="product-detail-card">
@@ -352,22 +402,18 @@
             <path fill-rule="evenodd" d="M4.293 5.293a1 1 0 011.414 0L8 7.586l2.293-2.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
           </svg>
         </button>
-        <div id="detail-body" class="detail-body hidden">
-          <!-- populated by JS -->
-        </div>
+        <div id="detail-body" class="detail-body hidden"></div>
       </div>
 
       <!-- Availability by pincode -->
       <div class="avail-card" id="avail-card">
         <h3 class="card-section-title">📍 Availability in Your Area</h3>
-        <div id="avail-content">
-          <!-- populated by JS -->
-        </div>
+        <div id="avail-content"></div>
         <div class="avail-check-row">
-          <input type="text" id="avail-pincode-input" inputmode="numeric" maxlength="6" placeholder="Enter pincode" aria-label="Check availability for pincode" />
+          <input type="text" id="avail-pincode-input" inputmode="numeric" maxlength="6" placeholder="Check another pincode" aria-label="Check availability for pincode" />
           <button type="button" class="btn-outline" onclick="checkAvailability()">Check</button>
         </div>
-        <div id="avail-result" class="hidden"></div>
+        <div id="avail-result" class="hidden" style="margin-top:12px;"></div>
       </div>
 
       <!-- Price alert -->
@@ -380,9 +426,7 @@
             <span class="alert-rupee">₹</span>
             <input type="number" id="alert-price-input" placeholder="50" min="1" max="9999" aria-label="Target price for alert" />
           </div>
-          <button type="button" class="btn-outline btn-bell" onclick="setPriceAlert()">
-            🔔 Set Alert
-          </button>
+          <button type="button" class="btn-outline btn-bell" onclick="setPriceAlert()">🔔 Set Alert</button>
         </div>
         <div id="alert-set-msg" class="hidden"></div>
       </div>
@@ -403,28 +447,23 @@
           </svg>
           Back
         </button>
-        <h1 class="subpage-title">My Grocery List</h1>
+        <div class="subpage-title-row">
+          <h1 class="subpage-title">My Grocery List</h1>
+        </div>
       </div>
     </div>
     <div class="section-inner">
       <div id="mylist-empty" class="empty-state">
         <div class="empty-icon">🛒</div>
         <p class="empty-title">Your list is empty</p>
-        <p class="empty-sub">Click "Add to List" on any product to build your grocery list</p>
+        <p class="empty-sub">Click "Add to List" on any product comparison to build your grocery list</p>
         <button type="button" class="btn-primary" onclick="showHome()">Browse Products</button>
       </div>
-      <div id="mylist-items" class="mylist-items hidden">
-        <!-- populated by JS -->
-      </div>
+      <div id="mylist-items" class="mylist-items hidden"></div>
       <div id="mylist-basket" class="basket-summary hidden">
-        <h3 class="basket-title">🏪 Cheapest Basket Comparison</h3>
-        <p class="basket-sub">Based on the items in your list, here's the total cost on each platform:</p>
-        <div id="basket-platform-totals">
-          <!-- populated by JS -->
-        </div>
-        <div id="basket-winner" class="basket-winner hidden">
-          <!-- populated by JS -->
-        </div>
+        <h3 class="basket-title">🏪 Platform Comparison</h3>
+        <p class="basket-sub">Compare prices for each item individually to find the best deals.</p>
+        <div id="basket-platform-totals"></div>
       </div>
     </div>
   </div><!-- /view-mylist -->
@@ -447,6 +486,12 @@
     </svg>
     <span>Search</span>
   </button>
+  <button type="button" class="bnav-btn" id="bnav-brands" onclick="showBrandsView()" aria-label="Brands">
+    <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20" aria-hidden="true">
+      <path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+    </svg>
+    <span>Brands</span>
+  </button>
   <button type="button" class="bnav-btn" id="bnav-list" onclick="showMyList()" aria-label="My List">
     <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20" aria-hidden="true">
       <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
@@ -465,11 +510,15 @@
 <footer class="site-footer" role="contentinfo">
   <div class="footer-inner">
     <p class="footer-brand">GroceryAI</p>
-    <p class="footer-note">Prices shown are representative estimates for comparison. Always verify at checkout. GroceryAI is an independent comparison service — not affiliated with any grocery platform.</p>
+    <p class="footer-note">
+      Prices shown are representative reference data for comparison purposes. Always verify at checkout.
+      GroceryAI is an independent price comparison service — not affiliated with Zepto, Blinkit, Swiggy Instamart, or Flipkart.
+      "Search on Platform" links open the platform's own search — GroceryAI does not earn from purchases.
+    </p>
     <p class="footer-copy">© 2025 GroceryAI</p>
   </div>
 </footer>
 
-<script src="app.js?v=13"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>
