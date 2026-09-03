@@ -295,30 +295,63 @@ function buildProductCard(product, fromView) {
   card.setAttribute("role", "listitem");
   card.setAttribute("aria-label", product.name);
 
-  const catName = product.category
-    ? product.category.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
-    : "";
+  // Image — prefer real product photo, fall back gracefully (no cartoon emoji in main slot)
+  let imgHtml;
+  if (product.image_url) {
+    imgHtml = `
+      <img src="${product.image_url}" alt="${product.name}" class="product-card-img" loading="lazy"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
+      <div class="product-img-placeholder" style="display:none">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <span>No Image</span>
+      </div>`;
+  } else {
+    imgHtml = `
+      <div class="product-img-placeholder">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+          <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+        <span>No Image</span>
+      </div>`;
+  }
 
-  const imgHtml = product.image_url
-    ? `<img src="${product.image_url}" alt="${product.name}" class="product-card-img" loading="lazy"
-         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
-       <span class="product-card-emoji-fallback" style="display:none">${product.emoji || "🛒"}</span>`
-    : `<span class="product-card-emoji-fallback">${product.emoji || "🛒"}</span>`;
+  // Price / MRP / discount
+  const price = product.base_price_inr;
+  const mrp   = product.mrp_inr || null;
+  const discPct = (mrp && mrp > price) ? Math.round((1 - price / mrp) * 100) : 0;
 
-  const ratingStars = product.rating ? `⭐ ${product.rating}` : "";
+  const priceHtml = `₹${price}`;
+  const mrpHtml   = (mrp && discPct > 0) ? `<span class="product-card-mrp">₹${mrp}</span>` : "";
+  const discHtml  = discPct > 0 ? `<span class="product-card-discount">${discPct}% off</span>` : "";
+  const discBadge = discPct > 0 ? `<span class="product-discount-badge">${discPct}% OFF</span>` : "";
+
+  // Quantity — first available size
+  const qty = product.available_sizes?.[0] || "";
+
+  // Availability — optimistic "Available" since we don't have live data per-card
+  const availHtml = `
+    <div class="product-card-avail">
+      <span class="avail-dot unknown"></span>
+      <span class="product-card-avail-text">Check availability</span>
+    </div>`;
 
   card.innerHTML = `
     ${inList ? '<span class="in-list-badge">✓ In List</span>' : ""}
+    ${discBadge}
     <div class="product-img-wrap" aria-hidden="true">${imgHtml}</div>
     <div class="product-card-body">
       ${product.brand ? `<p class="product-card-brand">${product.brand}</p>` : ""}
       <p class="product-card-name">${product.name}</p>
-      <p class="product-card-cat">${catName}${product.subcategory ? " · " + product.subcategory : ""}</p>
+      ${qty ? `<span class="product-card-qty">${qty}</span>` : ""}
       <div class="product-card-price-row">
-        <span class="product-card-price">from ₹${product.base_price_inr}</span>
-        <span class="product-card-unit">/ ${product.available_sizes?.[0] || "unit"}</span>
+        <span class="product-card-price">${priceHtml}</span>
+        ${mrpHtml}${discHtml}
       </div>
-      ${ratingStars ? `<div class="product-card-rating">${ratingStars}</div>` : ""}
+      ${availHtml}
       <div class="product-card-footer">
         <button type="button" class="compare-btn" aria-label="Compare prices for ${product.name}">
           Compare Prices →

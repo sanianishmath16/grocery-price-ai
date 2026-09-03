@@ -576,20 +576,23 @@ body {
 /* ── PRODUCT GRID ────────────────────────────────────────────────────── */
 .product-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(164px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+@media (min-width: 480px) {
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
 }
 @media (min-width: 640px) {
-  .product-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(186px, 1fr)); }
 }
 @media (min-width: 1024px) {
-  .product-grid { grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); }
+  .product-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
 }
 
-/* ── PRODUCT CARD ────────────────────────────────────────────────────── */
+/* ── PRODUCT CARD — Blinkit-style realistic grocery card ────────────── */
 .product-card {
   background: var(--surface);
-  border: 1.5px solid var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: pointer;
@@ -597,64 +600,98 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
+  box-shadow: var(--shadow-sm);
 }
 .product-card:hover {
   border-color: var(--green);
-  box-shadow: 0 6px 20px rgba(22,163,74,.12), 0 2px 8px rgba(0,0,0,.06);
-  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(22,163,74,.14), 0 2px 8px rgba(0,0,0,.06);
+  transform: translateY(-3px);
 }
 .in-list-badge {
   position: absolute;
-  top: 8px; right: 8px;
+  top: 8px; left: 8px;
   background: var(--green);
   color: #fff;
-  font-size: 10px;
-  font-weight: 700;
-  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 800;
+  border-radius: 5px;
   padding: 2px 6px;
-  z-index: 2;
+  z-index: 3;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+}
+/* Discount badge — top right of image */
+.product-discount-badge {
+  position: absolute;
+  top: 8px; right: 8px;
+  background: #15803d;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  border-radius: 5px;
+  padding: 2px 6px;
+  z-index: 3;
+  letter-spacing: .2px;
 }
 .product-img-wrap {
   width: 100%;
-  aspect-ratio: 4/3;
-  background: #f8fafc;
+  aspect-ratio: 1/1;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
+  position: relative;
+  padding: 10px;
 }
 .product-card-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   transition: transform .3s ease;
-  padding: 8px;
+  image-rendering: -webkit-optimize-contrast;
 }
-.product-card:hover .product-card-img { transform: scale(1.06); }
+.product-card:hover .product-card-img { transform: scale(1.05); }
 .product-card-emoji-fallback {
-  font-size: 56px;
+  font-size: 52px;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
   height: 100%;
 }
+/* No-image placeholder styled like a real grocery app */
+.product-img-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 6px;
+  color: var(--muted-light);
+}
+.product-img-placeholder svg { opacity: .35; }
+.product-img-placeholder span { font-size: 10px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+
 .product-card-body {
-  padding: 12px;
+  padding: 10px 10px 12px;
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  border-top: 1px solid var(--border);
 }
 .product-card-brand {
-  font-size: 10.5px;
-  color: var(--muted);
+  font-size: 10px;
+  color: var(--green-dark);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .5px;
-  margin-bottom: 1px;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .product-card-name {
   font-size: 13px;
@@ -665,18 +702,60 @@ body {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  margin-bottom: 3px;
 }
-.product-card-cat { font-size: 11px; color: var(--muted-light); margin-top: 1px; }
+/* Quantity / size pill */
+.product-card-qty {
+  display: inline-block;
+  font-size: 10.5px;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  width: fit-content;
+}
 .product-card-price-row {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 6px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
   flex-wrap: wrap;
 }
-.product-card-price { font-size: 16px; font-weight: 800; color: var(--green); }
-.product-card-unit { font-size: 11px; color: var(--muted); }
-.product-card-rating { font-size: 11.5px; color: var(--yellow); margin-top: 3px; }
+.product-card-price { font-size: 15px; font-weight: 800; color: var(--text); }
+.product-card-mrp {
+  font-size: 11.5px;
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.product-card-discount {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--green);
+  background: var(--green-light);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+/* Availability row */
+.product-card-avail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 10.5px;
+}
+.avail-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.avail-dot.in-stock  { background: var(--green); }
+.avail-dot.low-stock { background: #f59e0b; }
+.avail-dot.unknown   { background: var(--border-mid); }
+.product-card-avail-text { color: var(--muted); font-weight: 500; }
+
 .product-card-footer { margin-top: auto; padding-top: 8px; }
 .compare-btn {
   width: 100%;
@@ -852,10 +931,11 @@ body {
 .product-hero-img {
   width: 64px; height: 64px;
   border-radius: var(--radius);
-  object-fit: cover;
-  background: rgba(255,255,255,.15);
+  object-fit: contain;
+  background: rgba(255,255,255,.9);
   flex-shrink: 0;
-  border: 2px solid rgba(255,255,255,.3);
+  border: 2px solid rgba(255,255,255,.4);
+  padding: 4px;
 }
 .product-hero-emoji {
   width: 64px; height: 64px;

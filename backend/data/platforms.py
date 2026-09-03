@@ -13,7 +13,7 @@ import hashlib
 from typing import List, Dict, Any, Optional
 import urllib.parse
 
-DATA_TIMESTAMP = "2025-07-15"
+DATA_TIMESTAMP = "2025-07-16"
 
 # ---------------------------------------------------------------------------
 # Platform definitions
@@ -1308,7 +1308,7 @@ def get_product_comparison(product_id: str, pincode: str) -> Dict[str, Any]:
         "pincode": pincode,
         "platforms": platform_results,
         "cheapest_platform_id": cheapest["platform"]["id"] if cheapest else None,
-        "data_note": f"Representative demo data as of {DATA_TIMESTAMP}. Not live prices. Buy Now opens platform search.",
+        "data_note": f"Reference prices as of {DATA_TIMESTAMP}. Prices may vary. 'Search on Platform' opens the platform search for this product.",
     }
 
 

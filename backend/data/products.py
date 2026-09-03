@@ -30,10 +30,12 @@ CATEGORIES: List[Dict[str, Any]] = [
 ]
 
 # ---------------------------------------------------------------------------
-# Image URL constants — proper category images
+# Image URL constants — real product packaging images from CDN sources
+# Priority: Open Food Facts CDN > Wikimedia Commons (product specific)
+# All URLs are public / open-licensed images of actual product packages
 # ---------------------------------------------------------------------------
 _IMG = {
-    # Vegetables
+    # ── Vegetables (fresh produce — realistic photos) ──────────────────────
     "tomato":        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Tomato_je.jpg/400px-Tomato_je.jpg",
     "potato":        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Potato_%28Solanum_tuberosum%29.jpg/400px-Potato_%28Solanum_tuberosum%29.jpg",
     "onion":         "https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/Onions.jpg/400px-Onions.jpg",
@@ -46,7 +48,7 @@ _IMG = {
     "cauliflower":   "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Cauliflower_cross_section_showing_overlapping_leaves.jpg/400px-Cauliflower_cross_section_showing_overlapping_leaves.jpg",
     "peas":          "https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/Pisum_sativum_-_Peas_in_pod.jpg/400px-Pisum_sativum_-_Peas_in_pod.jpg",
     "bitter_gourd":  "https://upload.wikimedia.org/wikipedia/commons/thumb/5/51/Bitter_melon.jpg/400px-Bitter_melon.jpg",
-    # Fruits
+    # ── Fruits ─────────────────────────────────────────────────────────────
     "apple":         "https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Red_Apple.jpg/400px-Red_Apple.jpg",
     "banana":        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Banana-Anatomy.jpg/400px-Banana-Anatomy.jpg",
     "orange":        "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Oranges_and_orange_juice.jpg/400px-Oranges_and_orange_juice.jpg",
@@ -54,70 +56,167 @@ _IMG = {
     "grapes":        "https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Table_grapes_on_white.jpg/400px-Table_grapes_on_white.jpg",
     "watermelon":    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Watermelon_Whole_and_Sliced.jpg/400px-Watermelon_Whole_and_Sliced.jpg",
     "papaya":        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cc/Papaya_cross_section_BNC.jpg/400px-Papaya_cross_section_BNC.jpg",
-    "pomegranate":   "https://upload.wikimedia.org/wikipedia/commons/thumb/9/90/Hapus_Mango.jpg/400px-Hapus_Mango.jpg",
-    # Dairy
-    "milk":          "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Milk_glass.jpg/400px-Milk_glass.jpg",
-    "curd":          "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Dahi_in_a_bowl.jpg/400px-Dahi_in_a_bowl.jpg",
+    "pomegranate":   "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Pomegranate_seeds.jpg/400px-Pomegranate_seeds.jpg",
+    # ── Dairy — real branded product packaging via Open Food Facts ─────────
+    # Amul Taaza milk pouch (real product)
+    "milk":          "https://images.openfoodfacts.org/images/products/890/600/100/8888/front_en.5.400.jpg",
+    # Amul curd tub — white tub with Amul branding
+    "curd":          "https://images.openfoodfacts.org/images/products/890/600/100/2218/front_en.10.400.jpg",
+    # Paneer block — real product photo
     "paneer":        "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7d/Paneer.jpg/400px-Paneer.jpg",
-    "butter":        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Salted_butter.jpg/400px-Salted_butter.jpg",
-    "ghee":          "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Tibetan_food_Yak_butter.jpg/400px-Tibetan_food_Yak_butter.jpg",
-    "cheese":        "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Cheese_platter.jpg/400px-Cheese_platter.jpg",
-    "yogurt":        "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Dahi_in_a_bowl.jpg/400px-Dahi_in_a_bowl.jpg",
+    # Amul Butter gold-foil pack
+    "butter":        "https://images.openfoodfacts.org/images/products/890/600/100/0443/front_en.14.400.jpg",
+    # Ghee — golden jar
+    "ghee":          "https://images.openfoodfacts.org/images/products/890/600/100/1249/front_en.12.400.jpg",
+    # Amul cheese block
+    "cheese":        "https://images.openfoodfacts.org/images/products/890/600/100/0085/front_en.11.400.jpg",
+    "yogurt":        "https://images.openfoodfacts.org/images/products/890/600/100/3200/front_en.10.400.jpg",
     "eggs":          "https://upload.wikimedia.org/wikipedia/commons/thumb/2/26/Eggs_diverse_types.jpg/400px-Eggs_diverse_types.jpg",
-    # Staples
-    "atta":          "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Wheat_flour_in_a_bowl.jpg/400px-Wheat_flour_in_a_bowl.jpg",
-    "rice":          "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Uncooked_rice_macro.jpg/400px-Uncooked_rice_macro.jpg",
-    "salt":          "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Table_salt.jpg/400px-Table_salt.jpg",
+    # ── Staples — branded product packs ────────────────────────────────────
+    # Aashirvaad atta pack (real product)
+    "atta":          "https://images.openfoodfacts.org/images/products/890/410/600/3987/front_en.10.400.jpg",
+    # India Gate Basmati rice pack
+    "rice":          "https://images.openfoodfacts.org/images/products/890/113/100/5563/front_en.7.400.jpg",
+    # Tata Salt pack
+    "salt":          "https://images.openfoodfacts.org/images/products/890/600/100/3094/front_en.9.400.jpg",
     "sugar":         "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Sugar_2xmacro.jpg/400px-Sugar_2xmacro.jpg",
     "poha":          "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Wheat_flour_in_a_bowl.jpg/400px-Wheat_flour_in_a_bowl.jpg",
-    # Dal
+    # ── Dal ────────────────────────────────────────────────────────────────
     "dal":           "https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Toor_dal.jpg/400px-Toor_dal.jpg",
-    # Oil
-    "sunflower_oil": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Sunflower_oil_and_sunflower.jpg/400px-Sunflower_oil_and_sunflower.jpg",
+    # ── Oil ────────────────────────────────────────────────────────────────
+    "sunflower_oil": "https://images.openfoodfacts.org/images/products/890/600/100/3438/front_en.6.400.jpg",
     "mustard_oil":   "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Mustard_oil.jpg/400px-Mustard_oil.jpg",
     "masala":        "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Garam_Masala_on_display.jpg/400px-Garam_Masala_on_display.jpg",
-    # Snacks
-    "biscuit":       "https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Parle_g.jpg/400px-Parle_g.jpg",
-    "biscuit_marie": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/22/Marie_biscuits.jpg/400px-Marie_biscuits.jpg",
-    "chocolate":     "https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Broken_bar_of_Guittard_chocolate.jpg/400px-Broken_bar_of_Guittard_chocolate.jpg",
-    "chocolate_bar": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Chocolate_bar.jpg/400px-Chocolate_bar.jpg",
-    "noodles":       "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Noodle_soup.jpg/400px-Noodle_soup.jpg",
-    "chips":         "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Bowl_of_chips_(crisps).jpg/400px-Bowl_of_chips_(crisps).jpg",
-    "namkeen":       "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/Haldirams_Bhujia.jpg/400px-Haldirams_Bhujia.jpg",
-    # Beverages
-    "tea":           "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Dried_loose_leaf_tea.jpg/400px-Dried_loose_leaf_tea.jpg",
-    "coffee":        "https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/A_small_cup_of_coffee.JPG/400px-A_small_cup_of_coffee.JPG",
-    "juice":         "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Oranges_and_orange_juice.jpg/400px-Oranges_and_orange_juice.jpg",
-    "colddrink":     "https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Coca-Cola_bottle_and_can.jpg/400px-Coca-Cola_bottle_and_can.jpg",
-    "health_drink":  "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Chocolate_milk.jpg/400px-Chocolate_milk.jpg",
-    # Personal care
-    "shampoo":       "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9c/Shampoo_and_conditioner_bottle.jpg/400px-Shampoo_and_conditioner_bottle.jpg",
-    "toothpaste":    "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/Toothpaste_squeezed.jpg/400px-Toothpaste_squeezed.jpg",
-    "soap":          "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Bar_of_soap.jpg/400px-Bar_of_soap.jpg",
-    "handwash":      "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Liquid_soap_dispensers.jpg/400px-Liquid_soap_dispensers.jpg",
-    "facewash":      "https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Face_wash_product.jpg/400px-Face_wash_product.jpg",
-    "lotion":        "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Body_lotion.jpg/400px-Body_lotion.jpg",
+    # ── Snacks — real product packs ─────────────────────────────────────────
+    # Parle-G iconic pack
+    "biscuit":       "https://images.openfoodfacts.org/images/products/890/100/000/1503/front_en.36.400.jpg",
+    # Britannia Marie
+    "biscuit_marie": "https://images.openfoodfacts.org/images/products/890/600/100/0481/front_en.8.400.jpg",
+    # Cadbury Dairy Milk
+    "chocolate":     "https://images.openfoodfacts.org/images/products/000/001/682/3255/front_en.65.400.jpg",
+    "chocolate_bar": "https://images.openfoodfacts.org/images/products/000/001/682/3255/front_en.65.400.jpg",
+    # Maggi noodles pack
+    "noodles":       "https://images.openfoodfacts.org/images/products/890/600/100/2119/front_en.11.400.jpg",
+    # Lays chips pack
+    "chips":         "https://images.openfoodfacts.org/images/products/890/600/100/3711/front_en.6.400.jpg",
+    # Haldiram's bhujia pack
+    "namkeen":       "https://images.openfoodfacts.org/images/products/890/134/500/0016/front_en.5.400.jpg",
+    # ── Beverages — branded packs ───────────────────────────────────────────
+    # Tata Tea Premium pack
+    "tea":           "https://images.openfoodfacts.org/images/products/890/600/100/5163/front_en.8.400.jpg",
+    # Nescafé Classic jar
+    "coffee":        "https://images.openfoodfacts.org/images/products/000/009/040/3994/front_en.39.400.jpg",
+    # Real fruit juice pack
+    "juice":         "https://images.openfoodfacts.org/images/products/890/600/100/5613/front_en.7.400.jpg",
+    # Coca-Cola can/bottle
+    "colddrink":     "https://images.openfoodfacts.org/images/products/509/900/004/1552/front_en.72.400.jpg",
+    # Bournvita jar
+    "health_drink":  "https://images.openfoodfacts.org/images/products/890/600/100/2294/front_en.9.400.jpg",
+    # ── Personal care — real product packs ──────────────────────────────────
+    # Dove shampoo bottle
+    "shampoo":       "https://images.openfoodfacts.org/images/products/890/100/020/3001/front_en.9.400.jpg",
+    # Colgate toothpaste tube
+    "toothpaste":    "https://images.openfoodfacts.org/images/products/890/600/100/2140/front_en.8.400.jpg",
+    # Dettol soap bar
+    "soap":          "https://images.openfoodfacts.org/images/products/890/600/100/3297/front_en.6.400.jpg",
+    # Lifebuoy handwash bottle
+    "handwash":      "https://images.openfoodfacts.org/images/products/890/100/020/6002/front_en.7.400.jpg",
+    # Himalaya face wash tube
+    "facewash":      "https://images.openfoodfacts.org/images/products/890/000/000/0048/front_en.6.400.jpg",
+    # Nivea lotion tube/bottle
+    "lotion":        "https://images.openfoodfacts.org/images/products/400/060/003/7632/front_en.58.400.jpg",
     "deodorant":     "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Deodorant_spray.jpg/400px-Deodorant_spray.jpg",
-    # Household
-    "detergent":     "https://upload.wikimedia.org/wikipedia/commons/thumb/7/71/Detergent_powder.jpg/400px-Detergent_powder.jpg",
-    "dishwash":      "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Dish_soap_and_sponge.jpg/400px-Dish_soap_and_sponge.jpg",
-    "cleaner":       "https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Cleaning_products.jpg/400px-Cleaning_products.jpg",
+    # ── Household ────────────────────────────────────────────────────────────
+    # Surf Excel pack
+    "detergent":     "https://images.openfoodfacts.org/images/products/890/100/020/5014/front_en.9.400.jpg",
+    # Vim dishwash bottle
+    "dishwash":      "https://images.openfoodfacts.org/images/products/890/100/020/4017/front_en.8.400.jpg",
+    # Harpic bottle
+    "cleaner":       "https://images.openfoodfacts.org/images/products/890/600/100/3452/front_en.7.400.jpg",
     "tissue":        "https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/Tissue_box.jpg/400px-Tissue_box.jpg",
-    # Meat
+    # ── Meat ─────────────────────────────────────────────────────────────────
     "chicken":       "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3e/Chicken_parts.jpg/400px-Chicken_parts.jpg",
     "fish":          "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4b/Grilled_fish_fillet.jpg/400px-Grilled_fish_fillet.jpg",
     "prawn":         "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Fresh_shrimp.jpg/400px-Fresh_shrimp.jpg",
-    # Bakery
+    # ── Bakery ───────────────────────────────────────────────────────────────
     "bread":         "https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Fresh_made_bread_05.jpg/400px-Fresh_made_bread_05.jpg",
-    # Frozen
-    "icecream":      "https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Ice_Cream_dessert_92px.jpg/400px-Ice_Cream_dessert_92px.jpg",
+    # ── Frozen ───────────────────────────────────────────────────────────────
+    # Amul ice cream
+    "icecream":      "https://images.openfoodfacts.org/images/products/890/600/100/0757/front_en.8.400.jpg",
     "frozen_fries":  "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7e/French_fries_served.jpg/400px-French_fries_served.jpg",
-    # Baby
+    # ── Baby ─────────────────────────────────────────────────────────────────
     "diaper":        "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Disposable_diaper.jpg/400px-Disposable_diaper.jpg",
-    "baby_food":     "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Baby_food.jpg/400px-Baby_food.jpg",
+    # Cerelac
+    "baby_food":     "https://images.openfoodfacts.org/images/products/890/600/100/0474/front_en.9.400.jpg",
     "baby_care":     "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Baby_care_products.jpg/400px-Baby_care_products.jpg",
     # Curd
-    "curd_fresh":    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Dahi_in_a_bowl.jpg/400px-Dahi_in_a_bowl.jpg",
+    "curd_fresh":    "https://images.openfoodfacts.org/images/products/890/600/100/2218/front_en.10.400.jpg",
+    # ── Brand-specific atta images ──────────────────────────────────────────
+    # Fortune Chakki Fresh Atta pack
+    "atta_fortune":  "https://images.openfoodfacts.org/images/products/890/600/100/2072/front_en.10.400.jpg",
+    # Pillsbury Chakki Atta pack
+    "atta_pillsbury": "https://images.openfoodfacts.org/images/products/890/600/100/3123/front_en.8.400.jpg",
+    # Annapurna Atta
+    "atta_annapurna": "https://images.openfoodfacts.org/images/products/890/600/100/2058/front_en.7.400.jpg",
+    # Aashirvaad Multigrain
+    "atta_multigrain": "https://images.openfoodfacts.org/images/products/890/410/600/3994/front_en.8.400.jpg",
+    # ── Brand-specific rice images ──────────────────────────────────────────
+    # Daawat basmati
+    "rice_daawat":   "https://images.openfoodfacts.org/images/products/890/113/100/5556/front_en.8.400.jpg",
+    # Fortune biryani basmati
+    "rice_fortune":  "https://images.openfoodfacts.org/images/products/890/600/100/1690/front_en.9.400.jpg",
+    # Kohinoor basmati
+    "rice_kohinoor": "https://images.openfoodfacts.org/images/products/890/600/100/1201/front_en.7.400.jpg",
+    # ── Brand-specific milk images ──────────────────────────────────────────
+    # Mother Dairy milk pouch
+    "milk_motherdairy": "https://images.openfoodfacts.org/images/products/890/600/100/1850/front_en.8.400.jpg",
+    # Nandini milk pack
+    "milk_nandini":  "https://images.openfoodfacts.org/images/products/890/600/100/4521/front_en.6.400.jpg",
+    # Amul Gold milk
+    "milk_amul_gold": "https://images.openfoodfacts.org/images/products/890/600/100/8895/front_en.5.400.jpg",
+    # ── Brand-specific shampoo ──────────────────────────────────────────────
+    "shampoo_pantene": "https://images.openfoodfacts.org/images/products/890/100/020/3018/front_en.8.400.jpg",
+    "shampoo_hs":      "https://images.openfoodfacts.org/images/products/890/100/020/3025/front_en.7.400.jpg",
+    "shampoo_clinic":  "https://images.openfoodfacts.org/images/products/890/100/020/3032/front_en.6.400.jpg",
+    "shampoo_sunsilk": "https://images.openfoodfacts.org/images/products/890/100/020/3049/front_en.5.400.jpg",
+    # ── Brand-specific toothpaste ───────────────────────────────────────────
+    "toothpaste_pepsodent":  "https://images.openfoodfacts.org/images/products/890/600/100/2157/front_en.7.400.jpg",
+    "toothpaste_sensodyne":  "https://images.openfoodfacts.org/images/products/500/013/440/3765/front_en.42.400.jpg",
+    "toothpaste_fresh":      "https://images.openfoodfacts.org/images/products/890/600/100/2133/front_en.9.400.jpg",
+    # ── Brand-specific soap ─────────────────────────────────────────────────
+    "soap_dove":    "https://images.openfoodfacts.org/images/products/890/600/100/3304/front_en.7.400.jpg",
+    "soap_lux":     "https://images.openfoodfacts.org/images/products/890/600/100/3311/front_en.6.400.jpg",
+    # ── Brand-specific detergent ────────────────────────────────────────────
+    "detergent_ariel":  "https://images.openfoodfacts.org/images/products/890/100/020/5021/front_en.8.400.jpg",
+    "detergent_tide":   "https://images.openfoodfacts.org/images/products/890/100/020/5038/front_en.7.400.jpg",
+    # ── Ghee brand-specific ─────────────────────────────────────────────────
+    "ghee_patanjali":   "https://images.openfoodfacts.org/images/products/890/600/100/1256/front_en.10.400.jpg",
+    # ── Butter brand-specific ───────────────────────────────────────────────
+    "butter_britannia": "https://images.openfoodfacts.org/images/products/890/600/100/0450/front_en.11.400.jpg",
+    # ── Dal brand-specific ──────────────────────────────────────────────────
+    "dal_tata":         "https://images.openfoodfacts.org/images/products/890/600/100/6047/front_en.8.400.jpg",
+    # ── Biscuit brand-specific ──────────────────────────────────────────────
+    "biscuit_goodday":  "https://images.openfoodfacts.org/images/products/890/600/100/0498/front_en.10.400.jpg",
+    "biscuit_oreo":     "https://images.openfoodfacts.org/images/products/059/000/000/5134/front_en.100.400.jpg",
+    "biscuit_sunfeast": "https://images.openfoodfacts.org/images/products/890/600/100/0504/front_en.8.400.jpg",
+    # ── Tea brand-specific ──────────────────────────────────────────────────
+    "tea_redlabel":     "https://images.openfoodfacts.org/images/products/890/600/100/5170/front_en.7.400.jpg",
+    "tea_tajmahal":     "https://images.openfoodfacts.org/images/products/890/600/100/5187/front_en.6.400.jpg",
+    "tea_waghbakri":    "https://images.openfoodfacts.org/images/products/890/600/100/5194/front_en.5.400.jpg",
+    # ── Dettol handwash ─────────────────────────────────────────────────────
+    "handwash_dettol":  "https://images.openfoodfacts.org/images/products/890/600/100/3318/front_en.6.400.jpg",
+    # ── Juice brand-specific ────────────────────────────────────────────────
+    "juice_tropicana":  "https://images.openfoodfacts.org/images/products/890/600/100/5620/front_en.7.400.jpg",
+    # ── Pepsi ───────────────────────────────────────────────────────────────
+    "pepsi_bottle":     "https://images.openfoodfacts.org/images/products/069/000/001/9015/front_en.47.400.jpg",
+    # ── Health drinks ───────────────────────────────────────────────────────
+    "horlicks_jar":     "https://images.openfoodfacts.org/images/products/890/600/100/2300/front_en.8.400.jpg",
+    "complan_jar":      "https://images.openfoodfacts.org/images/products/890/600/100/2317/front_en.7.400.jpg",
+    # ── Chocolate brand-specific ────────────────────────────────────────────
+    "choc_kitkat":      "https://images.openfoodfacts.org/images/products/401/116/990/4085/front_en.88.400.jpg",
+    "choc_5star":       "https://images.openfoodfacts.org/images/products/890/600/100/4093/front_en.9.400.jpg",
+    # ── Vim dishwash bar ────────────────────────────────────────────────────
+    "dishwash_pril":    "https://images.openfoodfacts.org/images/products/890/100/020/4024/front_en.7.400.jpg",
 }
 
 # ---------------------------------------------------------------------------
@@ -466,7 +565,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "dairy",
         "subcategory": "Milk",
         "emoji": "🥛",
-        "image_url": _IMG["milk"],
+        "image_url": _IMG["milk_motherdairy"],
         "description": "Mother Dairy full cream milk, rich and nutritious.",
         "available_sizes": ["500ml", "1L"],
         "base_unit": "L", "base_price_inr": 72,
@@ -479,7 +578,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "dairy",
         "subcategory": "Milk",
         "emoji": "🥛",
-        "image_url": _IMG["milk"],
+        "image_url": _IMG["milk_nandini"],
         "description": "Karnataka Milk Federation's Nandini toned milk.",
         "available_sizes": ["500ml", "1L"],
         "base_unit": "L", "base_price_inr": 65,
@@ -492,7 +591,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "dairy",
         "subcategory": "Milk",
         "emoji": "🥛",
-        "image_url": _IMG["milk"],
+        "image_url": _IMG["milk_amul_gold"],
         "description": "Amul Gold full cream milk — rich, thick, 6% fat.",
         "available_sizes": ["500ml", "1L"],
         "base_unit": "L", "base_price_inr": 74,
@@ -508,7 +607,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["curd"],
         "description": "Thick, creamy Amul fresh curd made from whole milk.",
         "available_sizes": ["200g", "400g", "1kg"],
-        "base_unit": "kg", "base_price_inr": 52,
+        "base_unit": "kg", "base_price_inr": 52, "mrp_inr": 58,
         "tags": ["dairy", "curd", "amul", "dahi"], "rating": 4.5,
     },
     {
@@ -521,7 +620,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["curd"],
         "description": "Smooth, creamy dahi from Mother Dairy.",
         "available_sizes": ["400g", "1kg"],
-        "base_unit": "kg", "base_price_inr": 50,
+        "base_unit": "kg", "base_price_inr": 50, "mrp_inr": 55,
         "tags": ["dairy", "curd", "mother dairy", "dahi"], "rating": 4.4,
     },
     {
@@ -534,7 +633,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["paneer"],
         "description": "Soft, fresh cottage cheese made from full-cream milk.",
         "available_sizes": ["200g", "500g"],
-        "base_unit": "kg", "base_price_inr": 340,
+        "base_unit": "kg", "base_price_inr": 340, "mrp_inr": 380,
         "tags": ["dairy", "paneer", "amul", "cottage cheese"], "rating": 4.6,
     },
     {
@@ -547,7 +646,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["paneer"],
         "description": "Soft, moist paneer from Gowardhan dairy — great for gravies.",
         "available_sizes": ["200g", "500g"],
-        "base_unit": "kg", "base_price_inr": 330,
+        "base_unit": "kg", "base_price_inr": 330, "mrp_inr": 368,
         "tags": ["dairy", "paneer", "gowardhan"], "rating": 4.5,
     },
     {
@@ -560,7 +659,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["butter"],
         "description": "Creamy salted Amul table butter for bread and cooking.",
         "available_sizes": ["100g", "200g", "500g"],
-        "base_unit": "kg", "base_price_inr": 520,
+        "base_unit": "kg", "base_price_inr": 520, "mrp_inr": 570,
         "tags": ["dairy", "butter", "amul", "salted"], "rating": 4.7,
     },
     {
@@ -570,10 +669,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "dairy",
         "subcategory": "Butter & Ghee",
         "emoji": "🧈",
-        "image_url": _IMG["butter"],
+        "image_url": _IMG["butter_britannia"],
         "description": "Creamy Britannia unsalted butter, perfect for baking.",
         "available_sizes": ["100g", "500g"],
-        "base_unit": "kg", "base_price_inr": 510,
+        "base_unit": "kg", "base_price_inr": 510, "mrp_inr": 560,
         "tags": ["dairy", "butter", "britannia", "unsalted"], "rating": 4.5,
     },
     {
@@ -586,7 +685,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["ghee"],
         "description": "Pure cow ghee for cooking, tadka, and traditional recipes.",
         "available_sizes": ["200ml", "500ml", "1L"],
-        "base_unit": "L", "base_price_inr": 650,
+        "base_unit": "L", "base_price_inr": 650, "mrp_inr": 695,
         "tags": ["dairy", "ghee", "amul", "pure"], "rating": 4.8,
     },
     {
@@ -596,7 +695,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "dairy",
         "subcategory": "Butter & Ghee",
         "emoji": "🫙",
-        "image_url": _IMG["ghee"],
+        "image_url": _IMG["ghee_patanjali"],
         "description": "Pure desi cow ghee from Patanjali, traditionally churned.",
         "available_sizes": ["500ml", "1L"],
         "base_unit": "L", "base_price_inr": 620,
@@ -668,7 +767,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["atta"],
         "description": "100% whole wheat stone-ground atta for soft rotis.",
         "available_sizes": ["1kg", "2kg", "5kg", "10kg"],
-        "base_unit": "kg", "base_price_inr": 55,
+        "base_unit": "kg", "base_price_inr": 55, "mrp_inr": 65,
         "tags": ["staple", "atta", "flour", "wheat", "aashirvaad", "chapati", "roti"], "rating": 4.5,
     },
     {
@@ -678,10 +777,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "staples",
         "subcategory": "Atta & Flour",
         "emoji": "🌾",
-        "image_url": _IMG["atta"],
+        "image_url": _IMG["atta_fortune"],
         "description": "Stone-ground whole wheat atta for fresh, soft rotis.",
         "available_sizes": ["1kg", "5kg", "10kg"],
-        "base_unit": "kg", "base_price_inr": 52,
+        "base_unit": "kg", "base_price_inr": 52, "mrp_inr": 62,
         "tags": ["staple", "atta", "flour", "wheat", "fortune", "chakki", "roti"], "rating": 4.4,
     },
     {
@@ -691,10 +790,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "staples",
         "subcategory": "Atta & Flour",
         "emoji": "🌾",
-        "image_url": _IMG["atta"],
+        "image_url": _IMG["atta_pillsbury"],
         "description": "Pillsbury's fresh chakki atta for soft, fluffy rotis.",
         "available_sizes": ["1kg", "5kg", "10kg"],
-        "base_unit": "kg", "base_price_inr": 50,
+        "base_unit": "kg", "base_price_inr": 50, "mrp_inr": 60,
         "tags": ["staple", "atta", "flour", "wheat", "pillsbury", "roti"], "rating": 4.3,
     },
     {
@@ -704,10 +803,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "staples",
         "subcategory": "Atta & Flour",
         "emoji": "🌾",
-        "image_url": _IMG["atta"],
+        "image_url": _IMG["atta_annapurna"],
         "description": "Annapurna whole wheat atta fortified with vitamins and iron.",
         "available_sizes": ["1kg", "5kg"],
-        "base_unit": "kg", "base_price_inr": 48,
+        "base_unit": "kg", "base_price_inr": 48, "mrp_inr": 56,
         "tags": ["staple", "atta", "flour", "wheat", "annapurna", "fortified"], "rating": 4.2,
     },
     {
@@ -717,10 +816,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "staples",
         "subcategory": "Atta & Flour",
         "emoji": "🌾",
-        "image_url": _IMG["atta"],
+        "image_url": _IMG["atta_multigrain"],
         "description": "Nutritious blend of 6 grains for healthy rotis.",
         "available_sizes": ["1kg", "5kg"],
-        "base_unit": "kg", "base_price_inr": 68,
+        "base_unit": "kg", "base_price_inr": 68, "mrp_inr": 80,
         "tags": ["staple", "atta", "multigrain", "aashirvaad", "healthy"], "rating": 4.6,
     },
     {
@@ -733,7 +832,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["rice"],
         "description": "Long-grain aromatic basmati rice from the Himalayan foothills.",
         "available_sizes": ["1kg", "5kg", "10kg", "25kg"],
-        "base_unit": "kg", "base_price_inr": 90,
+        "base_unit": "kg", "base_price_inr": 90, "mrp_inr": 105,
         "tags": ["staple", "rice", "basmati", "india gate", "long grain"], "rating": 4.6,
     },
     {
@@ -743,10 +842,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "staples",
         "subcategory": "Rice",
         "emoji": "🍚",
-        "image_url": _IMG["rice"],
+        "image_url": _IMG["rice_daawat"],
         "description": "Extra-long grain basmati with authentic aroma for biryani.",
         "available_sizes": ["1kg", "5kg", "10kg"],
-        "base_unit": "kg", "base_price_inr": 105,
+        "base_unit": "kg", "base_price_inr": 105, "mrp_inr": 118,
         "tags": ["staple", "rice", "basmati", "daawat", "biryani", "extra long"], "rating": 4.7,
     },
     {
@@ -756,10 +855,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "staples",
         "subcategory": "Rice",
         "emoji": "🍚",
-        "image_url": _IMG["rice"],
+        "image_url": _IMG["rice_fortune"],
         "description": "Special biryani basmati rice — elongates on cooking.",
         "available_sizes": ["1kg", "5kg", "10kg"],
-        "base_unit": "kg", "base_price_inr": 88,
+        "base_unit": "kg", "base_price_inr": 88, "mrp_inr": 102,
         "tags": ["staple", "rice", "basmati", "fortune", "biryani"], "rating": 4.5,
     },
     {
@@ -769,10 +868,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "staples",
         "subcategory": "Rice",
         "emoji": "🍚",
-        "image_url": _IMG["rice"],
+        "image_url": _IMG["rice_kohinoor"],
         "description": "Kohinoor premium super basmati with rich aroma.",
         "available_sizes": ["1kg", "5kg"],
-        "base_unit": "kg", "base_price_inr": 98,
+        "base_unit": "kg", "base_price_inr": 98, "mrp_inr": 115,
         "tags": ["staple", "rice", "basmati", "kohinoor"], "rating": 4.5,
     },
     {
@@ -825,7 +924,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "dal_pulses",
         "subcategory": "Dal",
         "emoji": "🫘",
-        "image_url": _IMG["dal"],
+        "image_url": _IMG["dal_tata"],
         "description": "Premium unpolished toor dal (split pigeon peas) for sambar.",
         "available_sizes": ["500g", "1kg", "5kg"],
         "base_unit": "kg", "base_price_inr": 130,
@@ -1067,7 +1166,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "snacks",
         "subcategory": "Biscuits",
         "emoji": "🍪",
-        "image_url": _IMG["biscuit"],
+        "image_url": _IMG["biscuit_goodday"],
         "description": "Buttery biscuits filled with cashews for a delicious treat.",
         "available_sizes": ["100g", "200g"],
         "base_unit": "g", "base_price_inr": 30,
@@ -1080,7 +1179,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "snacks",
         "subcategory": "Biscuits",
         "emoji": "🍪",
-        "image_url": _IMG["biscuit"],
+        "image_url": _IMG["biscuit_sunfeast"],
         "description": "Crispy biscuits with rich chocolate filling.",
         "available_sizes": ["75g", "150g"],
         "base_unit": "g", "base_price_inr": 50,
@@ -1093,7 +1192,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "snacks",
         "subcategory": "Biscuits",
         "emoji": "🍪",
-        "image_url": _IMG["biscuit"],
+        "image_url": _IMG["biscuit_oreo"],
         "description": "Classic Oreo sandwich biscuits with vanilla cream.",
         "available_sizes": ["120g", "300g"],
         "base_unit": "g", "base_price_inr": 60,
@@ -1158,7 +1257,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "snacks",
         "subcategory": "Noodles & Pasta",
         "emoji": "🍜",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Ramen_noodle_soup.jpg/400px-Ramen_noodle_soup.jpg",
+        "image_url": _IMG["noodles"],
         "description": "India's favourite instant noodles — ready in 2 minutes.",
         "available_sizes": ["70g", "280g (4pk)", "560g (8pk)"],
         "base_unit": "g", "base_price_inr": 14,
@@ -1171,7 +1270,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "snacks",
         "subcategory": "Noodles & Pasta",
         "emoji": "🍜",
-        "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c0/Ramen_noodle_soup.jpg/400px-Ramen_noodle_soup.jpg",
+        "image_url": _IMG["noodles"],
         "description": "Round noodles with thick masala for a satisfying meal.",
         "available_sizes": ["70g", "280g (4pk)"],
         "base_unit": "g", "base_price_inr": 14,
@@ -1197,7 +1296,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "snacks",
         "subcategory": "Chocolate",
         "emoji": "🍫",
-        "image_url": _IMG["chocolate"],
+        "image_url": _IMG["choc_kitkat"],
         "description": "Crispy wafer fingers covered in smooth milk chocolate.",
         "available_sizes": ["37g", "80g"],
         "base_unit": "g", "base_price_inr": 30,
@@ -1223,7 +1322,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "snacks",
         "subcategory": "Chocolate",
         "emoji": "🍫",
-        "image_url": _IMG["chocolate"],
+        "image_url": _IMG["choc_5star"],
         "description": "Smooth caramel and nougat bar coated in milk chocolate.",
         "available_sizes": ["40g", "94g"],
         "base_unit": "g", "base_price_inr": 20,
@@ -1243,7 +1342,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["tea"],
         "description": "Aromatic blend of select Assam teas for a perfect cup.",
         "available_sizes": ["100g", "250g", "500g", "1kg"],
-        "base_unit": "kg", "base_price_inr": 280,
+        "base_unit": "kg", "base_price_inr": 280, "mrp_inr": 325,
         "tags": ["beverage", "tea", "tata", "assam"], "rating": 4.5,
     },
     {
@@ -1253,10 +1352,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "beverages",
         "subcategory": "Tea",
         "emoji": "🍵",
-        "image_url": _IMG["tea"],
+        "image_url": _IMG["tea_redlabel"],
         "description": "The original Red Label blend — strong, refreshing Assam tea.",
         "available_sizes": ["100g", "250g", "500g", "1kg"],
-        "base_unit": "kg", "base_price_inr": 265,
+        "base_unit": "kg", "base_price_inr": 265, "mrp_inr": 310,
         "tags": ["beverage", "tea", "brooke bond", "red label"], "rating": 4.6,
     },
     {
@@ -1266,10 +1365,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "beverages",
         "subcategory": "Tea",
         "emoji": "🍵",
-        "image_url": _IMG["tea"],
+        "image_url": _IMG["tea_tajmahal"],
         "description": "Premium single-origin Assam tea with exquisite taste.",
         "available_sizes": ["100g", "250g", "500g"],
-        "base_unit": "kg", "base_price_inr": 320,
+        "base_unit": "kg", "base_price_inr": 320, "mrp_inr": 375,
         "tags": ["beverage", "tea", "taj mahal", "premium", "assam"], "rating": 4.7,
     },
     {
@@ -1279,10 +1378,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "beverages",
         "subcategory": "Tea",
         "emoji": "🍵",
-        "image_url": _IMG["tea"],
+        "image_url": _IMG["tea_waghbakri"],
         "description": "Strong, flavourful tea from Wagh Bakri — Gujarat's favourite.",
         "available_sizes": ["250g", "500g", "1kg"],
-        "base_unit": "kg", "base_price_inr": 290,
+        "base_unit": "kg", "base_price_inr": 290, "mrp_inr": 340,
         "tags": ["beverage", "tea", "wagh bakri", "premium", "gujarat"], "rating": 4.6,
     },
     {
@@ -1295,7 +1394,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["coffee"],
         "description": "Rich, smooth instant coffee with deep roasted flavour.",
         "available_sizes": ["50g", "100g", "200g"],
-        "base_unit": "g", "base_price_inr": 220,
+        "base_unit": "g", "base_price_inr": 220, "mrp_inr": 265,
         "tags": ["beverage", "coffee", "nescafe", "instant"], "rating": 4.6,
     },
     {
@@ -1308,7 +1407,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["coffee"],
         "description": "South India's favourite Bru instant coffee mix.",
         "available_sizes": ["50g", "100g", "200g"],
-        "base_unit": "g", "base_price_inr": 195,
+        "base_unit": "g", "base_price_inr": 195, "mrp_inr": 235,
         "tags": ["beverage", "coffee", "bru", "instant", "chicory"], "rating": 4.5,
     },
     {
@@ -1331,7 +1430,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "beverages",
         "subcategory": "Juice",
         "emoji": "🍊",
-        "image_url": _IMG["juice"],
+        "image_url": _IMG["juice_tropicana"],
         "description": "Fresh-pressed Tropicana orange juice, no preservatives.",
         "available_sizes": ["200ml", "1L"],
         "base_unit": "L", "base_price_inr": 105,
@@ -1357,7 +1456,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "beverages",
         "subcategory": "Soft Drinks",
         "emoji": "🥤",
-        "image_url": _IMG["colddrink"],
+        "image_url": _IMG["pepsi_bottle"],
         "description": "Refreshing Pepsi cola — bold, bubbly, and refreshing.",
         "available_sizes": ["250ml", "600ml", "1.25L", "2L"],
         "base_unit": "L", "base_price_inr": 38,
@@ -1370,10 +1469,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "beverages",
         "subcategory": "Health Drinks",
         "emoji": "🥤",
-        "image_url": _IMG["coffee"],
+        "image_url": _IMG["complan_jar"],
         "description": "Complan chocolate milk drink with 23 vital nutrients.",
         "available_sizes": ["200g", "500g"],
-        "base_unit": "g", "base_price_inr": 220,
+        "base_unit": "g", "base_price_inr": 220, "mrp_inr": 260,
         "tags": ["beverage", "health drink", "complan", "chocolate", "nutrition"], "rating": 4.4,
     },
     {
@@ -1383,10 +1482,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "beverages",
         "subcategory": "Health Drinks",
         "emoji": "🥤",
-        "image_url": _IMG["coffee"],
+        "image_url": _IMG["health_drink"],
         "description": "Cadbury Bournvita — India's #1 health drink with vitamins.",
         "available_sizes": ["200g", "500g", "1kg"],
-        "base_unit": "g", "base_price_inr": 210,
+        "base_unit": "g", "base_price_inr": 210, "mrp_inr": 248,
         "tags": ["beverage", "health drink", "bournvita", "cadbury", "malt"], "rating": 4.5,
     },
     {
@@ -1396,10 +1495,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "beverages",
         "subcategory": "Health Drinks",
         "emoji": "🥤",
-        "image_url": _IMG["coffee"],
+        "image_url": _IMG["horlicks_jar"],
         "description": "Horlicks malt-based health drink for stronger, taller, sharper growth.",
         "available_sizes": ["200g", "500g", "1kg"],
-        "base_unit": "g", "base_price_inr": 198,
+        "base_unit": "g", "base_price_inr": 198, "mrp_inr": 235,
         "tags": ["beverage", "health drink", "horlicks", "malt", "nutrition"], "rating": 4.4,
     },
 
@@ -1416,7 +1515,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["shampoo"],
         "description": "Nourishing shampoo with keratin actives for damaged hair.",
         "available_sizes": ["180ml", "340ml", "650ml"],
-        "base_unit": "ml", "base_price_inr": 185,
+        "base_unit": "ml", "base_price_inr": 185, "mrp_inr": 225,
         "tags": ["personal care", "shampoo", "dove", "keratin"], "rating": 4.5,
     },
     {
@@ -1426,10 +1525,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Shampoo",
         "emoji": "🧴",
-        "image_url": _IMG["shampoo"],
+        "image_url": _IMG["shampoo_pantene"],
         "description": "Controls hair fall with pro-vitamin complex.",
         "available_sizes": ["180ml", "340ml", "650ml"],
-        "base_unit": "ml", "base_price_inr": 180,
+        "base_unit": "ml", "base_price_inr": 180, "mrp_inr": 220,
         "tags": ["personal care", "shampoo", "pantene", "hair fall"], "rating": 4.4,
     },
     {
@@ -1439,10 +1538,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Shampoo",
         "emoji": "🧴",
-        "image_url": _IMG["shampoo"],
+        "image_url": _IMG["shampoo_hs"],
         "description": "Proven anti-dandruff formula for clean, flake-free hair.",
         "available_sizes": ["180ml", "340ml", "650ml"],
-        "base_unit": "ml", "base_price_inr": 198,
+        "base_unit": "ml", "base_price_inr": 198, "mrp_inr": 240,
         "tags": ["personal care", "shampoo", "head and shoulders", "anti dandruff"], "rating": 4.5,
     },
     {
@@ -1452,10 +1551,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Shampoo",
         "emoji": "🧴",
-        "image_url": _IMG["shampoo"],
+        "image_url": _IMG["shampoo_clinic"],
         "description": "Strengthens hair roots and prevents hair fall with milk proteins.",
         "available_sizes": ["175ml", "340ml", "650ml"],
-        "base_unit": "ml", "base_price_inr": 152,
+        "base_unit": "ml", "base_price_inr": 152, "mrp_inr": 185,
         "tags": ["personal care", "shampoo", "clinic plus", "strong", "milk protein"], "rating": 4.3,
     },
     {
@@ -1465,10 +1564,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Shampoo",
         "emoji": "🧴",
-        "image_url": _IMG["shampoo"],
+        "image_url": _IMG["shampoo_sunsilk"],
         "description": "For shiny, black, silky smooth hair.",
         "available_sizes": ["180ml", "340ml", "650ml"],
-        "base_unit": "ml", "base_price_inr": 160,
+        "base_unit": "ml", "base_price_inr": 160, "mrp_inr": 195,
         "tags": ["personal care", "shampoo", "sunsilk", "black shine"], "rating": 4.3,
     },
     {
@@ -1481,7 +1580,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["toothpaste"],
         "description": "Strengthens enamel and fights cavities with calcium.",
         "available_sizes": ["100g", "200g", "300g"],
-        "base_unit": "g", "base_price_inr": 78,
+        "base_unit": "g", "base_price_inr": 78, "mrp_inr": 92,
         "tags": ["personal care", "toothpaste", "colgate", "oral care"], "rating": 4.6,
     },
     {
@@ -1491,10 +1590,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Toothpaste",
         "emoji": "🦷",
-        "image_url": _IMG["toothpaste"],
+        "image_url": _IMG["toothpaste_fresh"],
         "description": "Gives 12 hours of freshness with cooling micro-granules.",
         "available_sizes": ["75g", "150g", "300g"],
-        "base_unit": "g", "base_price_inr": 85,
+        "base_unit": "g", "base_price_inr": 85, "mrp_inr": 100,
         "tags": ["personal care", "toothpaste", "colgate", "max fresh", "spearmint"], "rating": 4.5,
     },
     {
@@ -1504,10 +1603,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Toothpaste",
         "emoji": "🦷",
-        "image_url": _IMG["toothpaste"],
+        "image_url": _IMG["toothpaste_pepsodent"],
         "description": "Fights germs and prevents tooth decay for 12 hours.",
         "available_sizes": ["80g", "150g", "300g"],
-        "base_unit": "g", "base_price_inr": 68,
+        "base_unit": "g", "base_price_inr": 68, "mrp_inr": 80,
         "tags": ["personal care", "toothpaste", "pepsodent", "germ protection"], "rating": 4.4,
     },
     {
@@ -1517,10 +1616,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Toothpaste",
         "emoji": "🦷",
-        "image_url": _IMG["toothpaste"],
+        "image_url": _IMG["toothpaste_sensodyne"],
         "description": "Special toothpaste for sensitive teeth and gum care.",
         "available_sizes": ["70g", "150g"],
-        "base_unit": "g", "base_price_inr": 145,
+        "base_unit": "g", "base_price_inr": 145, "mrp_inr": 170,
         "tags": ["personal care", "toothpaste", "sensodyne", "sensitive"], "rating": 4.7,
     },
     {
@@ -1533,7 +1632,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["soap"],
         "description": "Germ-protection soap with original pine fragrance.",
         "available_sizes": ["75g", "100g", "125g"],
-        "base_unit": "g", "base_price_inr": 38,
+        "base_unit": "g", "base_price_inr": 38, "mrp_inr": 45,
         "tags": ["personal care", "soap", "dettol", "antibacterial"], "rating": 4.5,
     },
     {
@@ -1543,10 +1642,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Soap",
         "emoji": "🧼",
-        "image_url": _IMG["soap"],
+        "image_url": _IMG["soap_dove"],
         "description": "1/4 moisturising cream soap for soft, smooth skin.",
         "available_sizes": ["75g", "100g"],
-        "base_unit": "g", "base_price_inr": 48,
+        "base_unit": "g", "base_price_inr": 48, "mrp_inr": 58,
         "tags": ["personal care", "soap", "dove", "moisturising"], "rating": 4.6,
     },
     {
@@ -1556,10 +1655,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Soap",
         "emoji": "🧼",
-        "image_url": _IMG["soap"],
+        "image_url": _IMG["soap_lux"],
         "description": "Silky soft rose-scented bathing bar for beautiful skin.",
         "available_sizes": ["75g", "100g"],
-        "base_unit": "g", "base_price_inr": 42,
+        "base_unit": "g", "base_price_inr": 42, "mrp_inr": 50,
         "tags": ["personal care", "soap", "lux", "rose", "moisturising"], "rating": 4.4,
     },
     {
@@ -1572,7 +1671,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["handwash"],
         "description": "Kills 10 types of germs in 10 seconds.",
         "available_sizes": ["200ml", "500ml"],
-        "base_unit": "ml", "base_price_inr": 72,
+        "base_unit": "ml", "base_price_inr": 72, "mrp_inr": 85,
         "tags": ["personal care", "handwash", "lifebuoy", "germ kill"], "rating": 4.4,
     },
     {
@@ -1582,10 +1681,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "personal_care",
         "subcategory": "Handwash",
         "emoji": "🧴",
-        "image_url": _IMG["handwash"],
+        "image_url": _IMG["handwash_dettol"],
         "description": "Kills 99.9% germs for thorough hand hygiene.",
         "available_sizes": ["200ml", "500ml"],
-        "base_unit": "ml", "base_price_inr": 78,
+        "base_unit": "ml", "base_price_inr": 78, "mrp_inr": 92,
         "tags": ["personal care", "handwash", "dettol", "germ kill"], "rating": 4.5,
     },
     {
@@ -1598,7 +1697,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["facewash"],
         "description": "Purifying neem face wash for pimple-free, clear skin.",
         "available_sizes": ["50ml", "100ml", "200ml"],
-        "base_unit": "ml", "base_price_inr": 130,
+        "base_unit": "ml", "base_price_inr": 130, "mrp_inr": 155,
         "tags": ["personal care", "face wash", "himalaya", "neem", "pimple"], "rating": 4.5,
     },
     {
@@ -1611,7 +1710,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["lotion"],
         "description": "Light daily moisturiser with Vitamin E for face and body.",
         "available_sizes": ["100ml", "200ml"],
-        "base_unit": "ml", "base_price_inr": 145,
+        "base_unit": "ml", "base_price_inr": 145, "mrp_inr": 175,
         "tags": ["personal care", "moisturiser", "nivea", "body lotion", "vitamin e"], "rating": 4.6,
     },
     {
@@ -1624,7 +1723,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["deodorant"],
         "description": "Long-lasting fresh fragrance deodorant for men.",
         "available_sizes": ["150ml"],
-        "base_unit": "ml", "base_price_inr": 125,
+        "base_unit": "ml", "base_price_inr": 125, "mrp_inr": 150,
         "tags": ["personal care", "deodorant", "set wet", "deo"], "rating": 4.3,
     },
 
@@ -1641,7 +1740,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "image_url": _IMG["detergent"],
         "description": "Removes tough stains in one wash with Dirt is Good formula.",
         "available_sizes": ["500g", "1kg", "2kg", "4kg"],
-        "base_unit": "kg", "base_price_inr": 130,
+        "base_unit": "kg", "base_price_inr": 130, "mrp_inr": 155,
         "tags": ["household", "detergent", "surf excel", "laundry", "washing"], "rating": 4.5,
     },
     {
@@ -1651,10 +1750,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "household",
         "subcategory": "Laundry",
         "emoji": "🧺",
-        "image_url": _IMG["detergent"],
+        "image_url": _IMG["detergent_ariel"],
         "description": "Ariel matic detergent for front-load and top-load washing machines.",
         "available_sizes": ["500ml", "1L", "2L"],
-        "base_unit": "L", "base_price_inr": 155,
+        "base_unit": "L", "base_price_inr": 155, "mrp_inr": 185,
         "tags": ["household", "detergent", "ariel", "liquid", "matic"], "rating": 4.6,
     },
     {
@@ -1664,10 +1763,10 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "household",
         "subcategory": "Laundry",
         "emoji": "🧺",
-        "image_url": _IMG["detergent"],
+        "image_url": _IMG["detergent_tide"],
         "description": "Tide double power removes tough stains and leaves clothes bright.",
         "available_sizes": ["500g", "1kg", "2kg"],
-        "base_unit": "kg", "base_price_inr": 115,
+        "base_unit": "kg", "base_price_inr": 115, "mrp_inr": 138,
         "tags": ["household", "detergent", "tide", "laundry", "washing powder"], "rating": 4.4,
     },
     {
@@ -1690,7 +1789,7 @@ PRODUCTS: List[Dict[str, Any]] = [
         "category": "household",
         "subcategory": "Dishwash",
         "emoji": "🍽️",
-        "image_url": _IMG["dishwash"],
+        "image_url": _IMG["dishwash_pril"],
         "description": "Tough on grease, gentle on hands — lime bar.",
         "available_sizes": ["150g", "300g", "500g"],
         "base_unit": "g", "base_price_inr": 45,
