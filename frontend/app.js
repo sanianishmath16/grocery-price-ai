@@ -186,7 +186,7 @@ async function init() {
   try {
     const [catData, prodData, brandData] = await Promise.all([
       apiFetch("/api/categories"),
-      apiFetch("/api/products?limit=100"),
+      apiFetch("/api/products?limit=200"),
       apiFetch("/api/brands"),
     ]);
     state.categories = catData.categories || [];

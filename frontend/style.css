@@ -368,13 +368,25 @@ body {
 
 /* ── HERO ────────────────────────────────────────────────────────────── */
 .hero {
-  background: linear-gradient(135deg, #0f3d1e 0%, #16a34a 50%, #22c55e 100%);
-  padding: 36px 16px 32px;
+  background: linear-gradient(150deg, #052e16 0%, #14532d 40%, #166534 70%, #16a34a 100%);
+  padding: 40px 16px 36px;
   color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -60px; right: -60px;
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, rgba(34,197,94,.15) 0%, transparent 70%);
+  pointer-events: none;
 }
 .hero-inner {
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
+  z-index: 1;
 }
 .hero-badge {
   display: inline-flex;
@@ -581,15 +593,15 @@ body {
   border-radius: var(--radius-lg);
   overflow: hidden;
   cursor: pointer;
-  transition: border-color var(--transition), box-shadow var(--transition), transform .1s;
+  transition: border-color var(--transition), box-shadow var(--transition), transform .15s;
   display: flex;
   flex-direction: column;
   position: relative;
 }
 .product-card:hover {
   border-color: var(--green);
-  box-shadow: var(--shadow);
-  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(22,163,74,.12), 0 2px 8px rgba(0,0,0,.06);
+  transform: translateY(-4px);
 }
 .in-list-badge {
   position: absolute;
@@ -604,26 +616,30 @@ body {
 }
 .product-img-wrap {
   width: 100%;
-  aspect-ratio: 1;
-  background: var(--surface-alt);
+  aspect-ratio: 4/3;
+  background: #f8fafc;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
 .product-card-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transition: transform .3s ease;
+  padding: 8px;
 }
-.product-card:hover .product-card-img { transform: scale(1.04); }
+.product-card:hover .product-card-img { transform: scale(1.06); }
 .product-card-emoji-fallback {
-  font-size: 52px;
+  font-size: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 .product-card-body {
   padding: 12px;
@@ -632,33 +648,52 @@ body {
   flex-direction: column;
   gap: 2px;
 }
-.product-card-brand { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
-.product-card-name { font-size: 13.5px; font-weight: 600; color: var(--text); line-height: 1.35; }
-.product-card-cat { font-size: 11px; color: var(--muted-light); }
+.product-card-brand {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 1px;
+}
+.product-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.product-card-cat { font-size: 11px; color: var(--muted-light); margin-top: 1px; }
 .product-card-price-row {
   display: flex;
   align-items: baseline;
-  gap: 4px;
-  margin-top: 4px;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
 }
-.product-card-price { font-size: 15px; font-weight: 700; color: var(--green); }
+.product-card-price { font-size: 16px; font-weight: 800; color: var(--green); }
 .product-card-unit { font-size: 11px; color: var(--muted); }
-.product-card-rating { font-size: 12px; color: var(--yellow); margin-top: 2px; }
-.product-card-footer { margin-top: 8px; }
+.product-card-rating { font-size: 11.5px; color: var(--yellow); margin-top: 3px; }
+.product-card-footer { margin-top: auto; padding-top: 8px; }
 .compare-btn {
   width: 100%;
-  background: var(--green-light);
-  color: var(--green-dark);
-  border: 1px solid var(--green-border);
+  background: var(--green);
+  color: #fff;
+  border: none;
   border-radius: var(--radius);
-  padding: 7px 10px;
+  padding: 8px 10px;
   font-size: 12.5px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   text-align: center;
-  transition: background var(--transition);
+  transition: background var(--transition), transform .1s;
+  letter-spacing: .2px;
 }
-.compare-btn:hover { background: var(--green); color: #fff; }
+.compare-btn:hover { background: var(--green-dark); }
+.compare-btn:active { transform: scale(.98); }
 
 /* ── SKELETON ────────────────────────────────────────────────────────── */
 .skel-product {

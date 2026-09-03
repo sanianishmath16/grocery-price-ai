@@ -17,14 +17,15 @@ POST /api/compare                   — legacy text-based comparison (kept for c
 import logging
 import sys
 import os
+import json
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from typing import Optional, List
+from typing import Optional, List, Any, Dict
 
 from config import SUPPORTED_APPS, CORS_ORIGINS, MAX_IMAGE_SIZE_BYTES
 from models.schemas import (
@@ -201,6 +202,68 @@ async def check_pincode_availability(
 # ---------------------------------------------------------------------------
 # Legacy text-based compare (kept for backward compatibility)
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Data Import endpoint
+# ---------------------------------------------------------------------------
+
+@app.post("/api/import/products", tags=["import"])
+async def import_products(products: List[Dict[str, Any]] = Body(...)):
+    """
+    Import products from a JSON array.
+    Each product must have at minimum: id, name, brand, category.
+    Returns count of successfully imported products.
+    
+    This endpoint adds products to the in-memory catalog (restart clears them).
+    For persistent storage, write to products.py or use a database.
+    """
+    from data.products import PRODUCTS, PRODUCT_BY_ID, PRODUCTS_BY_CATEGORY
+    imported = 0
+    skipped = 0
+    for p in products:
+        if not all(k in p for k in ("id", "name", "brand", "category")):
+            skipped += 1
+            continue
+        if p["id"] not in PRODUCT_BY_ID:
+            PRODUCTS.append(p)
+            PRODUCT_BY_ID[p["id"]] = p
+            PRODUCTS_BY_CATEGORY.setdefault(p["category"], []).append(p)
+            imported += 1
+        else:
+            skipped += 1
+    return {"imported": imported, "skipped": skipped, "total": len(PRODUCTS)}
+
+
+@app.get("/api/import/template", tags=["import"])
+async def import_template():
+    """Return a CSV template and JSON example for bulk product import."""
+    csv_headers = [
+        "id", "name", "brand", "category", "subcategory", "description",
+        "image_url", "available_sizes", "base_unit", "base_price_inr",
+        "tags", "emoji", "rating"
+    ]
+    example_product = {
+        "id": "example_product_1",
+        "name": "Example Atta Brand 5kg",
+        "brand": "Example Brand",
+        "category": "staples",
+        "subcategory": "Atta & Flour",
+        "description": "Premium whole wheat atta for soft rotis.",
+        "image_url": "https://example.com/product-image.jpg",
+        "available_sizes": ["1kg", "5kg", "10kg"],
+        "base_unit": "kg",
+        "base_price_inr": 55,
+        "tags": ["staple", "atta", "flour", "wheat"],
+        "emoji": "🌾",
+        "rating": 4.5
+    }
+    return {
+        "csv_headers": csv_headers,
+        "json_example": [example_product],
+        "note": "POST the JSON array to /api/import/products to import. Platform pricing can be added via /api/import/platform-products.",
+        "supported_categories": [c["id"] for c in CATEGORIES],
+    }
+
 
 @app.post("/api/compare", response_model=CompareResponse, tags=["compare"])
 async def compare_prices(body: CompareRequest):
