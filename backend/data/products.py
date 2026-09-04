@@ -56,7 +56,7 @@ _IMG = {
     "bitter_gourd":  "https://images.pexels.com/photos/7070155/pexels-photo-7070155.jpeg?auto=compress&cs=tinysrgb&w=400",
     # ── Fruits — real Pexels/Wikimedia photography ──────────────────────────
     "apple":         "https://upload.wikimedia.org/wikipedia/commons/1/15/Red_Apple.jpg",
-    "banana":        "https://images.pexels.com/photos/1166648/pexels-photo-1166648.jpeg?auto=compress&cs=tinysrgb&w=400",
+    "banana":        "https://images.pexels.com/photos/1093038/pexels-photo-1093038.jpeg?auto=compress&cs=tinysrgb&w=400",
     "orange":        "https://images.pexels.com/photos/235294/pexels-photo-235294.jpeg?auto=compress&cs=tinysrgb&w=400",
     "mango":         "https://upload.wikimedia.org/wikipedia/commons/9/90/Hapus_Mango.jpg",
     "grapes":        "https://images.pexels.com/photos/1520416/pexels-photo-1520416.jpeg?auto=compress&cs=tinysrgb&w=400",
@@ -129,10 +129,10 @@ _IMG = {
     # Dettol handwash — OFF
     "handwash":      "https://images.openfoodfacts.org/images/products/890/139/631/3106/front_en.10.400.jpg",
     # Face wash — Pexels
-    "facewash":      "https://images.pexels.com/photos/4465831/pexels-photo-4465831.jpeg?auto=compress&cs=tinysrgb&w=400",
+    "facewash":      "https://images.pexels.com/photos/3735657/pexels-photo-3735657.jpeg?auto=compress&cs=tinysrgb&w=400",
     # Lotion — Pexels
-    "lotion":        "https://images.pexels.com/photos/4465831/pexels-photo-4465831.jpeg?auto=compress&cs=tinysrgb&w=400",
-    "deodorant":     "https://images.pexels.com/photos/4465831/pexels-photo-4465831.jpeg?auto=compress&cs=tinysrgb&w=400",
+    "lotion":        "https://images.pexels.com/photos/3735657/pexels-photo-3735657.jpeg?auto=compress&cs=tinysrgb&w=400",
+    "deodorant":     "https://images.pexels.com/photos/3735657/pexels-photo-3735657.jpeg?auto=compress&cs=tinysrgb&w=400",
     # ── Household ───────────────────────────────────────────────────────────
     # Detergent — Pexels
     "detergent":     "https://images.pexels.com/photos/4239143/pexels-photo-4239143.jpeg?auto=compress&cs=tinysrgb&w=400",
@@ -184,9 +184,9 @@ _IMG = {
     # Head & Shoulders — OFF
     "shampoo_hs":      "https://images.openfoodfacts.org/images/products/870/021/630/7321/front_it.3.400.jpg",
     # Clinic Plus — Pexels shampoo bottle
-    "shampoo_clinic":  "https://images.pexels.com/photos/4465831/pexels-photo-4465831.jpeg?auto=compress&cs=tinysrgb&w=400",
+    "shampoo_clinic":  "https://images.pexels.com/photos/3735657/pexels-photo-3735657.jpeg?auto=compress&cs=tinysrgb&w=400",
     # Sunsilk — Pexels shampoo bottle
-    "shampoo_sunsilk": "https://images.pexels.com/photos/4465831/pexels-photo-4465831.jpeg?auto=compress&cs=tinysrgb&w=400",
+    "shampoo_sunsilk": "https://images.pexels.com/photos/3735657/pexels-photo-3735657.jpeg?auto=compress&cs=tinysrgb&w=400",
     # ── Brand-specific toothpaste ───────────────────────────────────────────
     # Pepsodent — Pexels toothpaste
     "toothpaste_pepsodent":  "https://images.pexels.com/photos/3902897/pexels-photo-3902897.jpeg?auto=compress&cs=tinysrgb&w=400",
