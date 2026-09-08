@@ -115,7 +115,7 @@ body {
 }
 .nav-search-wrap {
   flex: 1;
-  max-width: 520px;
+  max-width: 600px;
   position: relative;
 }
 .nav-search-box {
@@ -124,8 +124,8 @@ body {
   background: var(--bg);
   border: 1.5px solid var(--border);
   border-radius: 24px;
-  padding: 0 16px;
-  height: 40px;
+  padding: 0 18px;
+  height: 46px;
   gap: 8px;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
@@ -139,7 +139,7 @@ body {
   flex: 1;
   border: none;
   background: transparent;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text);
   outline: none;
 }
@@ -1543,6 +1543,9 @@ body {
   .hero-search-row { flex-direction: column; }
   .hero-cta { width: 100%; justify-content: center; }
   .platform-cards { grid-template-columns: 1fr; }
+  /* Search bar mobile: slightly reduced but still comfortable */
+  .nav-search-box { height: 42px; padding: 0 14px; }
+  .nav-search-box input { font-size: 14px; }
 }
 @media (min-width: 1024px) {
   .hero { padding: 48px 16px 40px; }

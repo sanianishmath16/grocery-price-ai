@@ -26,6 +26,7 @@
 // Config
 // ─────────────────────────────────────────────────────────────────────────────
 const API_BASE = window.__GROCERYAI_API || "";
+const LS_KEY = "groceryai_last_results"; // persistence key
 
 const PLATFORM_META = {
   zepto:     { name: "Zepto",            emoji: "⚡", css: "zepto",     logoText: "Z" },
@@ -79,7 +80,11 @@ function switchView(viewId) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function showHome() { switchView("view-home"); hideSearchSuggestions(); }
+function showHome() {
+  switchView("view-home");
+  hideSearchSuggestions();
+  clearLastResults();          // going home = intentional navigation away from results
+}
 
 function showCategoryView(catId) {
   state.currentCategory = catId;
@@ -93,20 +98,44 @@ function showCategoryView(catId) {
   loadCategoryProducts(catId);
 }
 
-function showSearchView(query) {
+function showSearchView(query, restoredProducts) {
   $("search-query-label").textContent = query;
+  // pre-fill the search inputs so the user can see what was searched
+  const navInput = $("global-search");
+  if (navInput) { navInput.value = query; show("search-clear-btn"); }
   switchView("view-search");
-  loadSearchResults(query);
+  if (restoredProducts) {
+    // Restore from localStorage — skip the API call
+    state._searchProducts = restoredProducts;
+    renderProductGrid(restoredProducts, "search-products", "search");
+    const countEl = $("search-result-count");
+    if (countEl) countEl.textContent = `${restoredProducts.length} products found`;
+    hide("search-empty");
+    // Update saved state so a refresh from here returns to search, not product
+    saveLastResults({ view: "search", query, products: restoredProducts });
+  } else {
+    loadSearchResults(query);
+  }
 }
 
 function showProductView(productId, fromView) {
   state.previousView = fromView || "home";
   $("product-back-btn").onclick = () => {
     if (state.previousView === "category") showCategoryView(state.currentCategory);
-    else if (state.previousView === "search") switchView("view-search");
+    else if (state.previousView === "search") {
+      // restore search view from saved state if available
+      const saved = loadLastResults();
+      if (saved && saved.view === "search") {
+        showSearchView(saved.query, saved.products);
+      } else {
+        switchView("view-search");
+      }
+    }
     else if (state.previousView === "brands") showBrandsView();
     else showHome();
   };
+  // Save product view state so refresh restores here
+  saveLastResults({ view: "product", productId, fromView: fromView || "home" });
   switchView("view-product");
   loadProductComparison(productId);
 }
@@ -203,9 +232,39 @@ async function init() {
     renderProductsFallback();
   }
 
+  // ── Restore last view from localStorage ──────────────────────────────────
+  const saved = loadLastResults();
+  if (saved) {
+    if (saved.view === "search" && saved.query && Array.isArray(saved.products)) {
+      showSearchView(saved.query, saved.products);
+    } else if (saved.view === "product" && saved.productId) {
+      // Re-enter the product page — comparison data is always fetched fresh (live prices)
+      showProductView(saved.productId, saved.fromView || "home");
+    }
+    // Don't show the pincode prompt when restoring a previous view
+    return;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   if (!state.pincode) {
     setTimeout(promptPincode, 1200);
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// localStorage persistence helpers
+// ─────────────────────────────────────────────────────────────────────────────
+function saveLastResults(data) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (e) { /* storage full */ }
+}
+function loadLastResults() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function clearLastResults() {
+  try { localStorage.removeItem(LS_KEY); } catch (e) { /* ignore */ }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -460,6 +519,8 @@ async function loadSearchResults(query) {
     // Update search result count
     const countEl = $("search-result-count");
     if (countEl) countEl.textContent = `${products.length} products found`;
+    // Persist so refresh restores these exact results
+    saveLastResults({ view: "search", query, products });
   } catch (err) {
     const q = query.toLowerCase();
     const products = state.products.filter(p =>
@@ -470,6 +531,8 @@ async function loadSearchResults(query) {
     );
     state._searchProducts = products;
     renderProductGrid(products, "search-products", "search");
+    // Save fallback results too
+    if (products.length > 0) saveLastResults({ view: "search", query, products });
   }
 }
 
@@ -500,6 +563,7 @@ function setupSearchAutocomplete() {
     $("global-search").value = "";
     hide("search-clear-btn");
     hideSearchSuggestions();
+    clearLastResults();         // clear persisted search so refresh shows home
     $("global-search").focus();
   });
 
