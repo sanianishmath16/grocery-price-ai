@@ -211,18 +211,37 @@ async function init() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Render Categories
 // ─────────────────────────────────────────────────────────────────────────────
+// Category background colors for visual distinction
+const CAT_COLORS = {
+  fruits_vegetables: { bg: "#f0fdf4", border: "#86efac", accent: "#16a34a" },
+  dairy:             { bg: "#eff6ff", border: "#93c5fd", accent: "#2563eb" },
+  staples:           { bg: "#fffbeb", border: "#fcd34d", accent: "#d97706" },
+  dal_pulses:        { bg: "#fef3c7", border: "#fbbf24", accent: "#92400e" },
+  oil_masala:        { bg: "#fef2f2", border: "#fca5a5", accent: "#dc2626" },
+  snacks:            { bg: "#f5f3ff", border: "#c4b5fd", accent: "#7c3aed" },
+  beverages:         { bg: "#ecfeff", border: "#67e8f9", accent: "#0891b2" },
+  personal_care:     { bg: "#fdf2f8", border: "#f0abfc", accent: "#db2777" },
+  household:         { bg: "#f0fdf4", border: "#6ee7b7", accent: "#059669" },
+  baby_care:         { bg: "#fffbeb", border: "#fde68a", accent: "#f59e0b" },
+  meat:              { bg: "#fff7ed", border: "#fdba74", accent: "#b45309" },
+  bakery:            { bg: "#fef9c3", border: "#fde047", accent: "#a16207" },
+  frozen:            { bg: "#eff6ff", border: "#bfdbfe", accent: "#1d4ed8" },
+};
+
 function renderCategories() {
   const container = $("categories-scroll");
   if (!container) return;
   container.innerHTML = "";
   state.categories.forEach(cat => {
+    const colors = CAT_COLORS[cat.id] || { bg: "#f9fafb", border: "#e5e7eb", accent: "#374151" };
     const card = el("button", "category-card");
     card.setAttribute("type", "button");
     card.setAttribute("role", "listitem");
     card.setAttribute("aria-label", cat.name);
+    card.style.cssText = `background:${colors.bg};border-color:${colors.border};`;
     card.innerHTML = `
-      <span class="cat-emoji" aria-hidden="true">${cat.emoji}</span>
-      <span class="cat-name">${cat.name}</span>
+      <span class="cat-emoji" aria-hidden="true" style="font-size:26px">${cat.emoji}</span>
+      <span class="cat-name" style="color:${colors.accent}">${cat.name}</span>
     `;
     card.addEventListener("click", () => showCategoryView(cat.id));
     container.appendChild(card);
@@ -302,20 +321,20 @@ function buildProductCard(product, fromView) {
       <img src="${product.image_url}" alt="${product.name}" class="product-card-img" loading="lazy"
         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" />
       <div class="product-img-placeholder" style="display:none">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
           <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/>
           <path d="M21 15l-5-5L5 21"/>
         </svg>
-        <span>No Image</span>
+        <span>No Image Available</span>
       </div>`;
   } else {
     imgHtml = `
       <div class="product-img-placeholder">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
           <rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/>
           <path d="M21 15l-5-5L5 21"/>
         </svg>
-        <span>No Image</span>
+        <span>No Image Available</span>
       </div>`;
   }
 
@@ -332,29 +351,37 @@ function buildProductCard(product, fromView) {
   // Quantity — first available size
   const qty = product.available_sizes?.[0] || "";
 
-  // Availability — optimistic "Available" since we don't have live data per-card
-  const availHtml = `
-    <div class="product-card-avail">
-      <span class="avail-dot unknown"></span>
-      <span class="product-card-avail-text">Check availability</span>
+  // Delivery time chip — Blinkit-style "11 MINS" chip
+  const deliveryChip = `
+    <div class="product-card-delivery">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11" aria-hidden="true">
+        <circle cx="8" cy="8" r="6.5"/>
+        <path d="M8 4.5V8.5l2.5 1.5" stroke-linecap="round"/>
+      </svg>
+      <span>10-20 mins</span>
     </div>`;
+
+  // Rating
+  const ratingHtml = product.rating
+    ? `<span class="product-card-rating">★ ${product.rating}</span>` : "";
 
   card.innerHTML = `
     ${inList ? '<span class="in-list-badge">✓ In List</span>' : ""}
     ${discBadge}
     <div class="product-img-wrap" aria-hidden="true">${imgHtml}</div>
     <div class="product-card-body">
+      ${deliveryChip}
       ${product.brand ? `<p class="product-card-brand">${product.brand}</p>` : ""}
       <p class="product-card-name">${product.name}</p>
       ${qty ? `<span class="product-card-qty">${qty}</span>` : ""}
       <div class="product-card-price-row">
         <span class="product-card-price">${priceHtml}</span>
         ${mrpHtml}${discHtml}
+        ${ratingHtml}
       </div>
-      ${availHtml}
       <div class="product-card-footer">
         <button type="button" class="compare-btn" aria-label="Compare prices for ${product.name}">
-          Compare Prices →
+          Compare Prices
         </button>
       </div>
     </div>
@@ -683,10 +710,11 @@ function _renderVariantPrice(v, isCheapest, pid, meta, areaAvail) {
     ? `<span class="cheapest-ribbon">CHEAPEST</span>` : "";
 
   const btnClass = `buy-btn buy-btn-${pid}`;
-  const btnLabel = `Search on ${meta.name}`;
+  // Search URLs open the platform's search for the product — labelled clearly
+  const btnLabel = `Search on ${meta.name} ↗`;
   const buyBtnHtml = v.product_url
-    ? `<a href="${v.product_url}" target="_blank" rel="noopener noreferrer" class="${btnClass}">${btnLabel} ↗</a>`
-    : `<span class="buy-btn buy-btn-unavail">No link available</span>`;
+    ? `<a href="${v.product_url}" target="_blank" rel="noopener noreferrer" class="${btnClass}" title="Opens ${meta.name} — search page for this product">${btnLabel}</a>`
+    : `<span class="buy-btn buy-btn-unavail">Not available</span>`;
 
   return {
     priceHtml, buyBtnHtml, stockHtml,
@@ -853,7 +881,8 @@ function renderAvailability(compareData) {
 function renderDataNote(compareData) {
   const noteEl = $("data-note-banner");
   if (!noteEl) return;
-  noteEl.textContent = `ℹ️ ${compareData.data_note || "Representative demo data. Not live prices."}`;
+  const note = compareData.data_note || "Prices shown are representative reference data as of 2025-07-16. Actual prices on each platform may differ. Click 'Search on Platform' to verify current prices.";
+  noteEl.innerHTML = `<strong>ℹ️ Data note:</strong> ${note}`;
   noteEl.classList.remove("hidden");
 }
 

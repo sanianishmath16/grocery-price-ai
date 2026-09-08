@@ -1308,7 +1308,7 @@ def get_product_comparison(product_id: str, pincode: str) -> Dict[str, Any]:
         "pincode": pincode,
         "platforms": platform_results,
         "cheapest_platform_id": cheapest["platform"]["id"] if cheapest else None,
-        "data_note": f"Reference prices as of {DATA_TIMESTAMP}. Prices may vary. 'Search on Platform' opens the platform search for this product.",
+        "data_note": f"Reference prices as of {DATA_TIMESTAMP}. Actual prices on each platform may vary. Click 'Search on Platform' to see live prices and buy directly on that platform.",
     }
 
 

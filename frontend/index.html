@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="stylesheet" href="style.css?v=33" />
+  <link rel="stylesheet" href="style.css?v=34" />
 </head>
 <body>
 
@@ -112,30 +112,51 @@
     <!-- Hero -->
     <section class="hero" aria-label="Hero banner">
       <div class="hero-inner">
-        <div class="hero-badge">
-          <span class="badge-dot"></span>
-          Compare prices across 4 platforms
-        </div>
-        <h1 class="hero-h1">
-          Find the <span class="hero-accent">cheapest</span> grocery<br class="hero-br"> price — instantly
-        </h1>
-        <p class="hero-sub">
-          Search 140+ grocery products across 80+ brands. Compare prices across Zepto, Blinkit,<br class="hero-br"> Swiggy Instamart &amp; Flipkart Minutes.
-        </p>
-        <div class="hero-search-row">
-          <div class="hero-search-box">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
-              <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
-            </svg>
-            <input type="text" id="hero-search" placeholder="Search groceries, atta, milk, rice, shampoo..." autocomplete="off" aria-label="Search products" />
+        <div class="hero-text-col">
+          <div class="hero-badge">
+            <span class="badge-dot"></span>
+            Compare prices across 4 platforms instantly
           </div>
-          <button type="button" class="hero-cta" onclick="focusHeroSearch()">Compare Prices</button>
+          <h1 class="hero-h1">
+            Find the <span class="hero-accent">cheapest</span> grocery<br class="hero-br"> price — instantly
+          </h1>
+          <p class="hero-sub">
+            200+ products, 80+ brands. Compare Zepto, Blinkit,<br class="hero-br"> Swiggy Instamart &amp; Flipkart Minutes.
+          </p>
+          <div class="hero-search-row">
+            <div class="hero-search-box">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+              </svg>
+              <input type="text" id="hero-search" placeholder="Search atta, milk, rice, shampoo..." autocomplete="off" aria-label="Search products" />
+            </div>
+            <button type="button" class="hero-cta" onclick="focusHeroSearch()">Compare</button>
+          </div>
+          <div class="hero-platform-row" aria-label="Supported platforms">
+            <span class="hero-plat-badge zepto-badge">⚡ Zepto</span>
+            <span class="hero-plat-badge blinkit-badge">💛 Blinkit</span>
+            <span class="hero-plat-badge insta-badge">🟠 Instamart</span>
+            <span class="hero-plat-badge flip-badge">🔵 Fk Minutes</span>
+          </div>
         </div>
-        <div class="platform-pills" aria-label="Supported platforms">
-          <span class="plat-pill">⚡ Zepto</span>
-          <span class="plat-pill">💛 Blinkit</span>
-          <span class="plat-pill">🟠 Instamart</span>
-          <span class="plat-pill">🔵 Fk Minutes</span>
+        <div class="hero-image-col" aria-hidden="true" id="hero-product-showcase">
+          <!-- Populated by JS with real product images -->
+          <button type="button" class="hero-img-card" onclick="showSearchView('atta')">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e2/Wheat_flour_in_a_bowl.jpg/400px-Wheat_flour_in_a_bowl.jpg" alt="Atta" loading="lazy" onerror="this.style.display='none'"/>
+            <span>Atta</span>
+          </button>
+          <button type="button" class="hero-img-card" onclick="showSearchView('milk')">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d9/Milk_glass.jpg/400px-Milk_glass.jpg" alt="Milk" loading="lazy" onerror="this.style.display='none'"/>
+            <span>Milk</span>
+          </button>
+          <button type="button" class="hero-img-card" onclick="showSearchView('rice')">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/37/Basmati_rice_%28variety%29.jpg/400px-Basmati_rice_%28variety%29.jpg" alt="Rice" loading="lazy" onerror="this.style.display='none'"/>
+            <span>Rice</span>
+          </button>
+          <button type="button" class="hero-img-card" onclick="showSearchView('tomato')">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/89/Tomato_je.jpg/400px-Tomato_je.jpg" alt="Tomato" loading="lazy" onerror="this.style.display='none'"/>
+            <span>Tomato</span>
+          </button>
         </div>
       </div>
     </section>
@@ -519,6 +540,6 @@
   </div>
 </footer>
 
-<script src="app.js?v=33"></script>
+<script src="app.js?v=34"></script>
 </body>
 </html>
