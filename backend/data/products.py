@@ -153,7 +153,7 @@ _IMG = {
     "oats_saffola":         "https://images.pexels.com/photos/216951/pexels-photo-216951.jpeg?auto=compress&cs=tinysrgb&w=400",
     "vermicelli":           "https://images.pexels.com/photos/1527603/pexels-photo-1527603.jpeg?auto=compress&cs=tinysrgb&w=400",
     # ── Dal ─────────────────────────────────────────────────────────────────
-    "dal_toor_tata":        "https://images.openfoodfacts.org/images/products/890/404/392/6216/front_en.5.400.jpg",
+    "dal_toor_tata": "/images/tata_sampann_toor_dal.jpg",
     "dal_toor_fortune": "/images/tata_sampann_toor_dal.jpg",
     "dal_moong_yellow": "/images/yellow_moong_dal.jpg",
     "dal_chana":            "https://images.pexels.com/photos/4110105/pexels-photo-4110105.jpeg?auto=compress&cs=tinysrgb&w=400",
