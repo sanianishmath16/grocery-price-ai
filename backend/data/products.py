@@ -84,7 +84,7 @@ _IMG = {
     "grapes_black":     "https://images.pexels.com/photos/760281/pexels-photo-760281.jpeg?auto=compress&cs=tinysrgb&w=400",
     "watermelon":       "https://images.pexels.com/photos/1313267/pexels-photo-1313267.jpeg?auto=compress&cs=tinysrgb&w=400",
     "papaya": "/images/papaya.jpg",
-    "pomegranate":      "https://images.pexels.com/photos/145991/pexels-photo-145991.jpeg?auto=compress&cs=tinysrgb&w=400",
+    "pomegranate": "/images/Pomegranate.jpg",
     "guava":            "https://images.pexels.com/photos/5945567/pexels-photo-5945567.jpeg?auto=compress&cs=tinysrgb&w=400",
     "pineapple":        "https://images.pexels.com/photos/947879/pexels-photo-947879.jpeg?auto=compress&cs=tinysrgb&w=400",
     "strawberry":       "https://images.pexels.com/photos/46174/strawberries-berries-fruit-freshness-46174.jpeg?auto=compress&cs=tinysrgb&w=400",
