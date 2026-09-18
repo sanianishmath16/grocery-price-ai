@@ -42,7 +42,7 @@ _IMG = {
     "onion":            "https://images.pexels.com/photos/4197793/pexels-photo-4197793.jpeg?auto=compress&cs=tinysrgb&w=400",
     "carrot":           "https://images.pexels.com/photos/1306559/pexels-photo-1306559.jpeg?auto=compress&cs=tinysrgb&w=400",
     "cucumber":         "https://images.pexels.com/photos/37528/cucumber-salad-food-healthy-37528.jpeg?auto=compress&cs=tinysrgb&w=400",
-    "capsicum_green":   "https://images.pexels.com/photos/3512171/pexels-photo-3512171.jpeg?auto=compress&cs=tinysrgb&w=400",
+    "capsicum_green":   "/images/capsicum_green.jpg",
     "capsicum_red":     "https://images.pexels.com/photos/128536/pexels-photo-128536.jpeg?auto=compress&cs=tinysrgb&w=400",
     "capsicum_yellow":  "https://images.pexels.com/photos/3893735/pexels-photo-3893735.jpeg?auto=compress&cs=tinysrgb&w=400",
     "spinach":          "https://images.pexels.com/photos/2325843/pexels-photo-2325843.jpeg?auto=compress&cs=tinysrgb&w=400",
