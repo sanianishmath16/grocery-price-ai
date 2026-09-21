@@ -1209,6 +1209,73 @@ PLATFORM_PRODUCTS: Dict[str, Dict[str, List[Dict[str, Any]]]] = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# ID aliases — products.py uses different IDs than the keys above.
+# For every mismatch, register the products.py ID pointing at the same
+# variant list so get_product_comparison() always finds real price data.
+# ---------------------------------------------------------------------------
+_ALIASES: Dict[str, str] = {
+    # Staples
+    "atta_aashirvaad":       "aashirvaad_atta",
+    "atta_fortune":          "fortune_atta",
+    "rice_india_gate":       "india_gate_basmati",
+    "rice_daawat":           "daawat_basmati",
+    "salt_tata":             "tata_salt",
+    # Dairy
+    "milk_amul_taaza":       "amul_taaza_milk",
+    "milk_amul_gold":        "amul_gold_milk",
+    "milk_motherdairy":      "mother_dairy_milk",
+    "curd_amul":             "amul_curd",
+    "curd_motherdairy":      "mother_dairy_curd",
+    "paneer_amul":           "amul_paneer",
+    "butter_amul":           "amul_butter",
+    "butter_britannia":      "britannia_butter",
+    "ghee_amul":             "amul_ghee",
+    "ghee_patanjali":        "patanjali_ghee",
+    # Dal & Pulses
+    "dal_toor_tata":         "tata_toor_dal",
+    "dal_moong_yellow":      "tata_moong_dal",
+    "dal_masoor_red":        "masoor_dal",
+    # Oil & Masala
+    "oil_fortune_sunflower": "fortune_sunflower_oil",
+    "oil_saffola_gold":      "saffola_sunflower_oil",
+    "masala_mdh_garam":      "mdh_garam_masala",
+    "masala_everest_garam":  "everest_garam_masala",
+    "turmeric_mdh":          "turmeric_powder",
+    # Snacks & Biscuits
+    "noodles_maggi":         "maggi_noodles",
+    "noodles_yippee":        "yippee_noodles",
+    "biscuit_parleg":        "parle_g",
+    "biscuit_goodday":       "britannia_good_day",
+    "chips_lays_classic":    "lays_classic",
+    "chips_kurkure":         "kurkure",
+    "choc_dairy_milk":       "dairy_milk",
+    "namkeen_bhujia":        "haldirams_bhujia",
+    # Beverages
+    "tea_tata_premium":      "tata_tea_premium",
+    "tea_red_label":         "red_label_tea",
+    "coffee_nescafe":        "nescafe_classic",
+    "juice_real":            "real_juice",
+    "cold_coca_cola":        "coca_cola",
+    "health_bournvita":      "bournvita",
+    # Personal Care
+    "shampoo_dove":          "dove_shampoo",
+    "shampoo_pantene":       "pantene_shampoo",
+    "toothpaste_colgate_st": "colgate_strong_teeth",
+    "soap_dettol":           "dettol_soap",
+    "soap_dove":             "dove_soap",
+    # Household
+    "det_surf_excel":        "surf_excel",
+    "det_ariel":             "ariel_detergent",
+    "dishwash_vim":          "vim_dishwash",
+    "toilet_harpic":         "harpic_toilet",
+}
+
+for _platform_id, _platform_data in PLATFORM_PRODUCTS.items():
+    for _product_id, _canonical_id in _ALIASES.items():
+        if _canonical_id in _platform_data and _product_id not in _platform_data:
+            _platform_data[_product_id] = _platform_data[_canonical_id]
+
 
 # ---------------------------------------------------------------------------
 # Normalised price calculation

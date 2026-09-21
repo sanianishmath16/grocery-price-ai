@@ -638,7 +638,7 @@ async function loadProductComparison(productId) {
     $("product-hero-meta").textContent = `${(product.category || "").replace(/_/g, " ")}${brandPart}`;
     $("product-pincode-display").textContent = pincode;
 
-    renderPlatformCards(compareData);
+    renderPlatformCards(compareData, product);
     renderProductDetails(product);
     renderAvailability(compareData);
     renderDataNote(compareData);
@@ -724,7 +724,7 @@ function _renderVariantPrice(v, isCheapest, pid, meta, areaAvail) {
   };
 }
 
-function renderPlatformCards(compareData) {
+function renderPlatformCards(compareData, product) {
   const container = $("platform-cards");
   const cheapestId = compareData.cheapest_platform_id;
 
@@ -742,6 +742,7 @@ function renderPlatformCards(compareData) {
 
   container.innerHTML = "";
   const platforms = compareData.platforms || [];
+  const availableSizes = product?.available_sizes || [];
 
   platforms.forEach(platData => {
     const platform = platData.platform;
@@ -752,8 +753,17 @@ function renderPlatformCards(compareData) {
     const areaAvail = platData.area_available;
     const bestVar = platData.best_variant;
 
-    // Track selected variant for this card
-    _cardSelectedVariant[pid] = bestVar ? variants.indexOf(bestVar) : 0;
+    // Determine initial selected pill index — find the pill (size) that matches the best variant
+    if (bestVar && availableSizes.length > 0) {
+      const bestLabel = bestVar.display_quantity || `${bestVar.quantity}${bestVar.unit}`;
+      const bestKey = _normSizeKey(bestLabel);
+      const pillIdx = availableSizes.findIndex(s => _normSizeKey(s) === bestKey);
+      _cardSelectedVariant[pid] = pillIdx >= 0 ? pillIdx : 0;
+    } else if (bestVar) {
+      _cardSelectedVariant[pid] = variants.indexOf(bestVar);
+    } else {
+      _cardSelectedVariant[pid] = 0;
+    }
 
     const card = el("div", `platform-card${isCheapest ? " is-cheapest" : ""}${!areaAvail ? " is-unavailable" : ""}`);
 
@@ -775,25 +785,74 @@ function renderPlatformCards(compareData) {
     `;
 
     container.appendChild(card);
-    _renderCardBody(card.querySelector(`#card-body-${pid}`), pid, variants, isCheapest, areaAvail, compareData);
+    _renderCardBody(card.querySelector(`#card-body-${pid}`), pid, variants, isCheapest, areaAvail, compareData, availableSizes);
   });
 }
 
-function _renderCardBody(bodyEl, pid, variants, isCheapest, areaAvail, compareData) {
-  const selIdx = _cardSelectedVariant[pid] || 0;
-  const selVar = variants[selIdx] || null;
+// Normalise a size label like "1kg", "500g", "2L", "1000ml" to a canonical string
+// so that "1kg" and "1000g" compare as equal.
+function _normSizeKey(label) {
+  const s = String(label).trim().toLowerCase().replace(/\s+/g, "");
+  const m = s.match(/^([\d.]+)(g|gm|gms|gram|grams|kg|kgs|kilogram|ml|milliliter|millilitre|l|liter|litre|liters|litres|pcs|pc|piece|pieces|nos)$/);
+  if (!m) return s;
+  let qty = parseFloat(m[1]);
+  const unit = m[2];
+  if (unit === "g" || unit === "gm" || unit === "gms" || unit === "gram" || unit === "grams") {
+    return `${qty}g`;
+  }
+  if (unit === "kg" || unit === "kgs" || unit === "kilogram") {
+    return `${qty * 1000}g`;
+  }
+  if (unit === "ml" || unit === "milliliter" || unit === "millilitre") {
+    return `${qty}ml`;
+  }
+  if (unit === "l" || unit === "liter" || unit === "litre" || unit === "liters" || unit === "litres") {
+    return `${qty * 1000}ml`;
+  }
+  return s;
+}
+
+function _renderCardBody(bodyEl, pid, variants, isCheapest, areaAvail, compareData, availableSizes) {
+  // Build a normalised-size→variant lookup for this platform
+  const sizeToVariant = {};
+  variants.forEach(v => {
+    const label = v.display_quantity || `${v.quantity}${v.unit}`;
+    sizeToVariant[_normSizeKey(label)] = v;
+  });
+
+  // Determine the pills to show: use availableSizes if present, otherwise fall back to variant list
+  let pills = [];
+  if (availableSizes && availableSizes.length > 0) {
+    pills = availableSizes.map(size => ({
+      label: size,
+      variant: sizeToVariant[_normSizeKey(size)] || null,
+    }));
+  } else if (variants.length > 0) {
+    pills = variants.map(v => ({
+      label: v.display_quantity || `${v.quantity}${v.unit}`,
+      variant: v,
+    }));
+  }
+
+  // selPillIdx is always a pill-level index (stored by pill clicks and initial best-variant mapping)
+  let selPillIdx = _cardSelectedVariant[pid] || 0;
+  if (selPillIdx >= pills.length) selPillIdx = 0;
+
+  const selPill = pills[selPillIdx] || null;
+  const selVar = selPill ? selPill.variant : null;
   const info = _renderVariantPrice(selVar, isCheapest, pid, PLATFORM_META[pid] || {}, areaAvail);
 
-  // Variant pills
-  const pillsHtml = variants.length > 1
+  // Variant pills — always show available sizes, even for single-size products
+  const pillsHtml = pills.length >= 1
     ? `<div class="platform-variant-pills" id="pills-${pid}">
-        ${variants.map((v, i) => {
-          const oos = !v.in_stock || !areaAvail;
+        ${pills.map((p, i) => {
+          const hasVariant = !!p.variant;
+          const oos = hasVariant ? (!p.variant.in_stock || !areaAvail) : true;
           return `<button type="button"
-            class="variant-pill ${i === selIdx ? "selected" : ""}${oos ? " out-of-stock" : ""}"
+            class="variant-pill ${i === selPillIdx ? "selected" : ""}${oos ? " out-of-stock" : ""}"
             data-pidx="${i}"
-            aria-label="${v.display_quantity || v.quantity + v.unit}${oos ? " (out of stock)" : ""}">
-            ${v.display_quantity || v.quantity + v.unit}
+            aria-label="${p.label}${oos ? " (unavailable)" : ""}">
+            ${p.label}
           </button>`;
         }).join("")}
       </div>` : "";
@@ -824,12 +883,12 @@ function _renderCardBody(bodyEl, pid, variants, isCheapest, areaAvail, compareDa
   `;
 
   // Wire up variant pill clicks
-  if (variants.length > 1) {
+  if (pills.length >= 1) {
     bodyEl.querySelectorAll(".variant-pill").forEach(pill => {
       pill.addEventListener("click", () => {
         _cardSelectedVariant[pid] = parseInt(pill.dataset.pidx, 10);
         const cheapestId = compareData.cheapest_platform_id;
-        _renderCardBody(bodyEl, pid, variants, pid === cheapestId, areaAvail, compareData);
+        _renderCardBody(bodyEl, pid, variants, pid === cheapestId, areaAvail, compareData, availableSizes);
       });
     });
   }
