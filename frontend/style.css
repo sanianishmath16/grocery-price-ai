@@ -1104,6 +1104,41 @@ body {
 }
 
 /* Compare section label */
+/* ── Shared product size selector ───────────────────────────────────── */
+.product-size-selector {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.size-selector-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.size-selector-pill {
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+  transition: border-color var(--transition), background var(--transition), color var(--transition);
+}
+.size-selector-pill:hover {
+  border-color: var(--green);
+  color: var(--green-dark);
+}
+.size-selector-pill.selected {
+  border-color: var(--green);
+  background: var(--green-light);
+  color: var(--green-dark);
+  font-weight: 600;
+}
+
 .compare-section-label {
   font-size: 13px;
   font-weight: 700;
@@ -1450,6 +1485,18 @@ body {
 .mylist-item-info { flex: 1; }
 .mylist-item-name { font-size: 14px; font-weight: 600; color: var(--text); }
 .mylist-item-brand { font-size: 12px; color: var(--muted); }
+.mylist-item-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.mylist-compare-btn {
+  background: none;
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  cursor: pointer;
+  color: var(--green-dark);
+  font-size: 12px;
+  transition: background var(--transition);
+}
+.mylist-compare-btn:hover { background: var(--green-light); }
 .mylist-remove-btn {
   background: none;
   border: 1px solid var(--border);
@@ -1461,6 +1508,30 @@ body {
   transition: background var(--transition);
 }
 .mylist-remove-btn:hover { background: var(--red-light); }
+/* ── CART ITEM PRICE PILLS ──────────────────────────────────────────── */
+.mylist-item-prices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+.item-price-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+.item-price-pill-zepto     { background: #f0e6ff; color: #5b21b6; }
+.item-price-pill-blinkit   { background: #fef9c3; color: #92400e; }
+.item-price-pill-instamart { background: #fff3e0; color: #c2410c; }
+.item-price-pill-flipkart  { background: #e0f2fe; color: #0369a1; }
+.item-price-pill-na        { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+
+/* ── BASKET SUMMARY ─────────────────────────────────────────────────── */
 .basket-summary {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1470,6 +1541,12 @@ body {
 }
 .basket-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
 .basket-sub { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+.basket-no-data {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 10px 0;
+  line-height: 1.5;
+}
 .basket-platform-row {
   display: flex;
   align-items: center;
@@ -1479,6 +1556,30 @@ body {
   font-size: 14px;
 }
 .basket-platform-row:last-child { border-bottom: none; }
+.basket-row-best {
+  background: var(--green-light);
+  border-radius: var(--radius);
+  padding: 10px 10px;
+  margin: 2px -10px;
+  border-bottom: none !important;
+}
+.basket-row-na { opacity: 0.5; }
+.basket-row-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.basket-row-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.basket-plat-name { font-size: 14px; font-weight: 500; }
+.basket-plat-total { font-size: 15px; font-weight: 700; color: var(--text); }
+.basket-na { font-size: 13px; font-weight: 400; color: var(--muted); }
+.basket-coverage { font-size: 11px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 1px 6px; }
+.basket-cheapest-tag { font-size: 11px; font-weight: 700; color: var(--green-dark); background: var(--green-border); border-radius: 10px; padding: 2px 8px; }
+.basket-savings { font-size: 12px; color: var(--muted); }
 .basket-winner {
   background: var(--green-light);
   border: 1px solid var(--green-border);

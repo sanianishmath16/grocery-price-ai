@@ -105,6 +105,7 @@ function showProductView(productId, fromView) {
     if (state.previousView === "category") showCategoryView(state.currentCategory);
     else if (state.previousView === "search") switchView("view-search");
     else if (state.previousView === "brands") showBrandsView();
+    else if (state.previousView === "mylist") showMyList();
     else showHome();
   };
   switchView("view-product");
@@ -619,6 +620,7 @@ async function loadProductComparison(productId) {
 
     const product = productData.product;
     state.currentProduct = product;
+    state.currentCompareData = compareData;
 
     // Update product header
     const heroImgEl = $("product-hero-img");
@@ -638,6 +640,7 @@ async function loadProductComparison(productId) {
     $("product-hero-meta").textContent = `${(product.category || "").replace(/_/g, " ")}${brandPart}`;
     $("product-pincode-display").textContent = pincode;
 
+    renderSizeSelector(product, compareData);
     renderPlatformCards(compareData, product);
     renderProductDetails(product);
     renderAvailability(compareData);
@@ -787,6 +790,80 @@ function renderPlatformCards(compareData, product) {
     container.appendChild(card);
     _renderCardBody(card.querySelector(`#card-body-${pid}`), pid, variants, isCheapest, areaAvail, compareData, availableSizes);
   });
+}
+
+function renderSizeSelector(product, compareData) {
+  const selectorEl = $("product-size-selector");
+  if (!selectorEl) return;
+
+  const sizes = product.available_sizes || [];
+  if (sizes.length === 0) {
+    selectorEl.classList.add("hidden");
+    selectorEl.innerHTML = "";
+    return;
+  }
+
+  // Determine the initially selected index from the best variant of any platform
+  let initIdx = 0;
+  const platforms = compareData.platforms || [];
+  for (const platData of platforms) {
+    const bv = platData.best_variant;
+    if (bv) {
+      const bestLabel = bv.display_quantity || `${bv.quantity}${bv.unit}`;
+      const idx = sizes.findIndex(s => _normSizeKey(s) === _normSizeKey(bestLabel));
+      if (idx >= 0) { initIdx = idx; break; }
+    }
+  }
+
+  function updateHeroWeight(sizeLabel) {
+    const brandPart = product.brand ? ` · ${product.brand}` : "";
+    $("product-hero-meta").textContent =
+      `${(product.category || "").replace(/_/g, " ")}${brandPart} · ${sizeLabel}`;
+  }
+
+  function selectSize(idx) {
+    // Sync all platform cards to this size index
+    platforms.forEach(platData => {
+      _cardSelectedVariant[platData.platform.id] = idx;
+    });
+
+    // Re-render all platform card bodies
+    const cheapestId = compareData.cheapest_platform_id;
+    platforms.forEach(platData => {
+      const pid = platData.platform.id;
+      const bodyEl = document.getElementById(`card-body-${pid}`);
+      if (bodyEl) {
+        _renderCardBody(
+          bodyEl, pid,
+          platData.variants || [],
+          pid === cheapestId,
+          platData.area_available,
+          compareData,
+          sizes
+        );
+      }
+    });
+
+    // Update pills active state
+    selectorEl.querySelectorAll(".size-selector-pill").forEach((pill, i) => {
+      pill.classList.toggle("selected", i === idx);
+    });
+
+    updateHeroWeight(sizes[idx]);
+  }
+
+  selectorEl.innerHTML =
+    `<span class="size-selector-label">Size:</span>` +
+    sizes.map((s, i) =>
+      `<button type="button" class="size-selector-pill${i === initIdx ? " selected" : ""}" data-idx="${i}">${s}</button>`
+    ).join("");
+
+  selectorEl.querySelectorAll(".size-selector-pill").forEach(pill => {
+    pill.addEventListener("click", () => selectSize(parseInt(pill.dataset.idx, 10)));
+  });
+
+  selectorEl.classList.remove("hidden");
+  updateHeroWeight(sizes[initIdx]);
 }
 
 // Normalise a size label like "1kg", "500g", "2L", "1000ml" to a canonical string
@@ -1005,7 +1082,23 @@ function addToList(pid) {
   if (!state.currentProduct) return;
   const product = state.currentProduct;
   if (state.myList.some(i => i.id === product.id)) return;
-  state.myList.push({ id: product.id, name: product.name, brand: product.brand, emoji: product.emoji, image_url: product.image_url });
+
+  // Capture best price per platform from the live comparison data
+  const prices = {};
+  (state.currentCompareData?.platforms || []).forEach(p => {
+    if (p.best_variant && p.best_variant.price != null) {
+      prices[p.platform.id] = p.best_variant.price;
+    }
+  });
+
+  state.myList.push({
+    id: product.id,
+    name: product.name,
+    brand: product.brand,
+    emoji: product.emoji,
+    image_url: product.image_url,
+    prices,
+  });
   localStorage.setItem("groceryai_list", JSON.stringify(state.myList));
   updateCartCount();
 }
@@ -1035,30 +1128,123 @@ function renderMyList() {
   }
   hide("mylist-empty"); show("mylist-items"); show("mylist-basket");
 
+  const PLATFORMS = ["zepto", "blinkit", "instamart", "flipkart"];
+
+  // ── Per-item rows ────────────────────────────────────────────────────
   itemsEl.innerHTML = state.myList.map(item => {
     const imgHtml = item.image_url
       ? `<img src="${item.image_url}" alt="${item.name}" class="mylist-item-img" loading="lazy" onerror="this.style.display='none'">`
       : `<div class="mylist-item-emoji">${item.emoji || "🛒"}</div>`;
+
+    // Build per-platform price pills for this item
+    const pricePills = PLATFORMS.map(pid => {
+      const meta = PLATFORM_META[pid];
+      const price = item.prices?.[pid];
+      return price != null
+        ? `<span class="item-price-pill item-price-pill-${meta.css}" title="${meta.name}">${meta.emoji} ₹${price}</span>`
+        : `<span class="item-price-pill item-price-pill-na" title="${meta.name} — not listed">${meta.emoji} —</span>`;
+    }).join("");
+
     return `
       <div class="mylist-item">
         ${imgHtml}
         <div class="mylist-item-info">
           <div class="mylist-item-name">${item.name}</div>
           ${item.brand ? `<div class="mylist-item-brand">${item.brand}</div>` : ""}
+          <div class="mylist-item-prices">${pricePills}</div>
         </div>
-        <button type="button" class="mylist-remove-btn" onclick="removeFromList('${item.id}')">Remove</button>
+        <div class="mylist-item-actions">
+          <button type="button" class="mylist-compare-btn" onclick="showProductView('${item.id}', 'mylist')">Compare</button>
+          <button type="button" class="mylist-remove-btn" onclick="removeFromList('${item.id}')">Remove</button>
+        </div>
       </div>`;
   }).join("");
 
-  // Basket comparison placeholder
+  // ── Basket totals table ──────────────────────────────────────────────
   const totalsEl = $("basket-platform-totals");
-  if (totalsEl) {
+  if (!totalsEl) return;
+
+  // Sum prices per platform (only items that have a price for that platform)
+  const totals = {};
+  const counts = {};
+  PLATFORMS.forEach(pid => { totals[pid] = 0; counts[pid] = 0; });
+
+  state.myList.forEach(item => {
+    PLATFORMS.forEach(pid => {
+      const price = item.prices?.[pid];
+      if (price != null) {
+        totals[pid] += price;
+        counts[pid]++;
+      }
+    });
+  });
+
+  const totalItems = state.myList.length;
+  const activePlatforms = PLATFORMS.filter(pid => counts[pid] > 0);
+
+  if (activePlatforms.length === 0) {
+    // No price data saved yet (items added before this update or no compare loaded)
     totalsEl.innerHTML = `
-      <p style="font-size:13px;color:var(--muted);padding:10px 0;">
-        Compare each product individually using the "Compare Prices" button to see platform-specific pricing.
-      </p>
-    `;
+      <p class="basket-no-data">
+        Open each product and tap <strong>"Compare Prices"</strong> then <strong>"+ Add to List"</strong> to capture live prices.
+      </p>`;
+    return;
   }
+
+  // Find cheapest platform (most items covered + lowest total)
+  const ranked = activePlatforms.slice().sort((a, b) => {
+    if (counts[b] !== counts[a]) return counts[b] - counts[a]; // more coverage first
+    return totals[a] - totals[b]; // then lower total
+  });
+  const cheapestPid = ranked[0];
+
+  const rows = PLATFORMS.map(pid => {
+    const meta = PLATFORM_META[pid];
+    const covered = counts[pid];
+    const total = totals[pid];
+    const isCheapest = pid === cheapestPid;
+    const coverageNote = covered < totalItems
+      ? `<span class="basket-coverage">${covered}/${totalItems} items</span>` : "";
+    const savings = isCheapest && ranked.length > 1
+      ? "" : (isCheapest ? "" : `<span class="basket-savings">+₹${(total - totals[cheapestPid]).toFixed(0)} more</span>`);
+
+    if (covered === 0) {
+      return `
+        <div class="basket-platform-row basket-row-na">
+          <div class="basket-row-left">
+            <div class="platform-logo ${meta.css}" style="width:28px;height:28px;font-size:11px;flex-shrink:0">${meta.logoText}</div>
+            <span class="basket-plat-name">${meta.name}</span>
+          </div>
+          <span class="basket-plat-total basket-na">Not listed</span>
+        </div>`;
+    }
+
+    return `
+      <div class="basket-platform-row${isCheapest ? " basket-row-best" : ""}">
+        <div class="basket-row-left">
+          <div class="platform-logo ${meta.css}" style="width:28px;height:28px;font-size:11px;flex-shrink:0">${meta.logoText}</div>
+          <span class="basket-plat-name">${meta.name}</span>
+          ${coverageNote}
+        </div>
+        <div class="basket-row-right">
+          ${savings}
+          <span class="basket-plat-total">₹${total.toFixed(0)}</span>
+          ${isCheapest ? `<span class="basket-cheapest-tag">🏆 Best</span>` : ""}
+        </div>
+      </div>`;
+  }).join("");
+
+  const savedAmount = ranked.length > 1
+    ? (totals[ranked[ranked.length - 1]] - totals[cheapestPid]).toFixed(0)
+    : null;
+
+  totalsEl.innerHTML = `
+    ${rows}
+    ${savedAmount && Number(savedAmount) > 0 ? `
+    <div class="basket-winner">
+      🏆 Shop on <strong>${PLATFORM_META[cheapestPid].name}</strong> and save up to ₹${savedAmount} on this list!
+    </div>` : ""}
+  `;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
